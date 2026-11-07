@@ -1,5 +1,8 @@
 """Setzt die Artefakt-Seite aus den Dateien der App zusammen.
-Aufruf: python3 build.py <web-ordner> <ausgabe.html>
+Aufruf: python3 build.py <web-ordner> <ausgabe.html> [--standalone]
+
+--standalone: vollständige HTML-Seite für normales Webhosting (z. B. GitHub Pages).
+Ohne Claude-Speicher läuft sie automatisch als Demo mit Beispiel-Nachbarn.
 """
 import pathlib
 import re
@@ -8,6 +11,7 @@ import sys
 web = pathlib.Path(sys.argv[1])
 here = pathlib.Path(__file__).parent
 out = pathlib.Path(sys.argv[2])
+standalone = '--standalone' in sys.argv[3:]
 
 css = (web / 'styles.css').read_text()
 html = (web / 'index.html').read_text()
@@ -53,6 +57,26 @@ page = f"""<title>Parkplatz</title>
 <script>
 {js}
 </script>
+"""
+if standalone:
+    page = page.replace('<title>Parkplatz</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n', '', 1)
+    page = f"""<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parkplatz · Demo</title>
+<meta name="theme-color" content="#16191f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parkplatz">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+</head>
+<body>
+{page}
+</body>
+</html>
 """
 page = re.sub(r'\n{3,}', '\n\n', page)
 out.write_text(page)

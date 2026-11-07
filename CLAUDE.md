@@ -22,6 +22,7 @@ server/          Python-Backend (fast nur Standardbibliothek, http.server + sqli
 web/             Frontend als PWA ohne Build-Schritt (index.html, styles.css, app.js, sw.js)
 tests/           unittest: test_rules.py, test_leave_requests.py, test_patio.py
 artifact/        Version als claude.ai-Artefakt (siehe unten)
+docs/            Demo als GitHub-Pages-Seite (gebaut mit artifact/build.py --standalone)
 REPRODUKTION.md  vollständige Bauanleitung (Datenmodell und Layout wörtlich, alle Texte, alle Testfälle)
 ```
 
@@ -68,7 +69,7 @@ python3 -m venv .venv            # auf dem Mac im iCloud-Ordner: .venv.nosync
 
 ## Artefakt-Version (`artifact/`)
 
-Dieselbe Oberfläche als claude.ai-Artefakt, ohne Server: Daten im gemeinsamen Artefakt-Speicher (`residents/{nutzer-id}` nur selbst schreibbar, `spots`, `decisions`, `requests`), Identität über das Claude-Konto, alle Regeln in der Seite. Keine Push-Nachrichten (Hinweise nur in der offenen Seite). `python3 artifact/build.py web artifact/parkplatz.html` setzt die Seite aus `web/styles.css`, `web/index.html` und `artifact/app.js` zusammen. Das bisher veröffentlichte Artefakt gehört einem anderen Claude-Account; aus einem anderen Account entstünde ein neues Artefakt mit eigenem Link.
+Dieselbe Oberfläche als claude.ai-Artefakt, ohne Server: Daten im gemeinsamen Artefakt-Speicher (`residents/{nutzer-id}` nur selbst schreibbar, `spots`, `decisions`, `requests`), Identität über das Claude-Konto, alle Regeln in der Seite. Keine Push-Nachrichten (Hinweise nur in der offenen Seite). `python3 artifact/build.py web artifact/parkplatz.html` setzt die Seite aus `web/styles.css`, `web/index.html` und `artifact/app.js` zusammen. Für GitHub Pages: `python3 artifact/build.py web docs/index.html --standalone` (läuft dort nur als Demo ohne gemeinsamen Speicher). Das bisher veröffentlichte Artefakt gehört einem anderen Claude-Account; aus einem anderen Account entstünde ein neues Artefakt mit eigenem Link.
 
 ## Offene Punkte
 

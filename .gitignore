@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/
+data.nosync/
+.venv/
+.venv.nosync/
+.DS_Store
