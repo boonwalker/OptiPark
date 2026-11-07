@@ -698,6 +698,10 @@ Ergänzend im API-Test: Nach Schritt 6 parkt Anna neu so, dass Ben auf R2 hinter
 
 Am Ende: `python -m unittest discover tests -v` → **alle grün** (55 aus den Tabellen oben + der API-Test).
 
+### 12b. Konflikte anderer
+
+`/api/state` liefert angemeldeten Nachbarn zusätzlich `other_conflicts`: alle Konflikte mit Status `open`, an denen sie **nicht** beteiligt sind, je `{blocker_spot, blocker_name, blocker_departs_at, blocked_spot, blocked_name, blocked_departs_at}`. Die Oberfläche zeichnet sie als blasse graue Linie (`.links line.other`, ohne Animation) und zeigt sie im Platz-Fenster unter „Konflikte anderer hier“ („Deniz (R1) steht vor Emil (R3)“ / „Emil muss morgen 06:30 raus, Deniz fährt erst …“). Legende: „Konflikt anderer“. Karten, Hervorhebung der Plätze und Benachrichtigungen bleiben bei den Beteiligten. Die Artefakt-Version berechnet dasselbe in `buildState()`.
+
 ### 12a. Sprachen
 
 - **Server** (`server/i18n.py`): Tabelle `EN` (deutscher Text mit `{platzhaltern}` → englischer Text), `t(lang, text, **werte)`, `norm(lang)` (alles außer `de`/`en` → `de`), `lang_of(conn, resident_id)`, `fmt_day(lang, datum, tage_ab_heute)`. Nachrichten (`conflicts._msg`, `leave_requests._msg`/`_blocker_messages`) werden **je Empfänger** in dessen `resident.lang` geschrieben; `fmt_when(..., lang)` und `fmt_route(..., lang)` nehmen die Sprache als letzten Parameter (Standard `de`). `ApiError`/`RequestError` tragen den deutschen Text plus Werte; übersetzt wird beim Antworten nach dem Header `X-Lang` (sonst Sprache des Nachbarn, sonst Deutsch). `patio_text` in `/api/state` in der Sprache der Anfrage. `POST /api/register` nimmt `lang`, `PATCH /api/me` nimmt `{lang}` allein.

@@ -140,7 +140,7 @@ def get_state(ctx):
 
         result = {"version": version, "now": iso(now), "lot": lot, "zones": zones, "spots": spots,
                   "exits": exits, "horizon_hours": conflicts.HORIZON.total_seconds() / 3600,
-                  "me": None, "conflicts": [], "leave_requests": [], "patio_reservations": [],
+                  "me": None, "conflicts": [], "other_conflicts": [], "leave_requests": [], "patio_reservations": [],
                   "push": {"public_key": push.public_key()}, "invite_required": bool(INVITE_CODE)}
         if not me:
             return result
@@ -184,6 +184,17 @@ def get_state(ctx):
             d["role"] = "blocker" if d["blocker_resident_id"] == me["id"] else "blocked"
             d["patio_text"] = conflicts.fmt_route(d["patio_route"], ctx["lang"])
             result["conflicts"].append(d)
+        # Offene Konflikte anderer Nachbarn: nur zur Anzeige auf der Grafik (graue Linie)
+        result["other_conflicts"] = []
+        for (cid,) in conn.execute(f"""
+                SELECT c.id FROM conflict c
+                JOIN parking pa ON pa.id = c.blocker_parking_id JOIN car ca ON ca.id = pa.car_id
+                JOIN parking pb ON pb.id = c.blocked_parking_id JOIN car cb ON cb.id = pb.car_id
+                WHERE c.status = 'open' AND ca.resident_id != ? AND cb.resident_id != ?
+                ORDER BY c.blocked_departs_at""", (me["id"], me["id"])).fetchall():
+            d = conflicts.conflict_details(conn, cid)
+            result["other_conflicts"].append({k: d[k] for k in (
+                "blocker_spot", "blocker_name", "blocker_departs_at", "blocked_spot", "blocked_name", "blocked_departs_at")})
         result["leave_requests"] = leave_requests.for_resident(conn, me["id"], now)
         # Zugesagte Patio-Notwege: wer hier parkt, versperrt sie
         result["patio_reservations"] = []

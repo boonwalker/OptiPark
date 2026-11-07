@@ -274,6 +274,8 @@ body.can-park .bay:not(.occupied) { animation: bay-in .55s cubic-bezier(.2, .9, 
 @keyframes wait { 0%, 100% { box-shadow: inset 0 0 0 2px var(--paint); } 50% { box-shadow: inset 0 0 0 3px var(--amber), 0 0 16px rgba(255, 181, 71, .5); } }
 .links line { stroke: var(--warn); stroke-width: 3; stroke-dasharray: 6 6; stroke-linecap: round; animation: dash 1s linear infinite; }
 .links circle { fill: var(--warn); }
+.links line.other { stroke: var(--muted); stroke-width: 2; opacity: .55; animation: none; }
+.links circle.other { fill: var(--muted); opacity: .55; }
 
 .legend { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; color: var(--muted); font-size: 12px; margin: 14px 0 0; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -281,6 +283,7 @@ body.can-park .bay:not(.occupied) { animation: bay-in .55s cubic-bezier(.2, .9, 
 .dot.mine { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .dot.free { box-shadow: inset 0 0 0 2px var(--paint); }
 .dot.warn { background: var(--warn); }
+.dot.other { background: var(--muted); opacity: .6; }
 
 /* ── Bottom Sheet ─────────────────────────────────────── */
 .sheet-backdrop {
@@ -400,6 +403,7 @@ main {
       <span><i class="dot mine"></i><span data-i18n>Dein Auto</span></span>
       <span><i class="dot free"></i><span data-i18n>Frei – antippen zum Parken</span></span>
       <span><i class="dot warn"></i><span data-i18n>Konflikt</span></span>
+      <span><i class="dot other"></i><span data-i18n>Konflikt anderer</span></span>
     </p>
   </main>
 
@@ -485,6 +489,10 @@ const I18N_EN = {
   'Dein Auto': 'Your car',
   'Frei – antippen zum Parken': 'Free – tap to park',
   'Konflikt': 'Conflict',
+  'Konflikt anderer': 'Others’ conflict',
+  'Konflikte anderer hier': 'Other neighbours’ conflicts here',
+  '{a_name} ({a_spot}) steht vor {b_name} ({b_spot})': '{a_name} ({a_spot}) is in front of {b_name} ({b_spot})',
+  '{b_name} muss {b_when} raus, {a_name} fährt erst {a_when}.': '{b_name} has to leave {b_when}, {a_name} isn’t leaving until {a_when}.',
   'Tür 1 · links': 'Door 1 · left',
   'Tür 2 · rechts': 'Door 2 · right',
   'Fehler {n}': 'Error {n}',
@@ -1088,7 +1096,7 @@ function buildState() {
 
   // Konflikte
   const occ = new Map(spots.filter((s) => s.occupant).map((s) => [s.id, { carId: s.occupant.car_id, dep: s.occupant.next_departure ? Date.parse(s.occupant.next_departure.at) : null }]));
-  const conflicts = [], patio_reservations = [];
+  const conflicts = [], other_conflicts = [], patio_reservations = [];
   const allOccupied = new Set(occ.keys());
   for (const { blocker, blocked } of findBlockings(occ)) {
     const a = bySpot[blocker].occupant, b = bySpot[blocked].occupant;
@@ -1113,7 +1121,7 @@ function buildState() {
     if (uid && (c.blocker_resident_id === uid || c.blocked_resident_id === uid)) {
       c.role = c.blocker_resident_id === uid ? 'blocker' : 'blocked';
       conflicts.push(c);
-    }
+    } else if (status === 'open') other_conflicts.push(c);   // nur als graue Linie auf der Grafik
   }
   conflicts.sort((x, y) => x.blocked_departs_at.localeCompare(y.blocked_departs_at));
 
@@ -1141,7 +1149,7 @@ function buildState() {
       c.patio_now = c.spot_id && c.patio_route !== 'never' ? patioRoute(c.spot_id, others) : null;
     }
   }
-  return { lot: LOT, zones: ZONES, spots, exits: EXIT_LIST, me, conflicts, leave_requests, patio_reservations };
+  return { lot: LOT, zones: ZONES, spots, exits: EXIT_LIST, me, conflicts, other_conflicts, leave_requests, patio_reservations };
 }
 
 function isRequestActive(q, now = Date.now()) {
@@ -1488,6 +1496,7 @@ function renderLinks() {
     return `<line class="${cls}" x1="${x1}%" y1="${y1}%" x2="${x2}%" y2="${y2}%"/><circle class="${cls}" cx="${x2}%" cy="${y2}%" r="5"/>`;
   };
   $('#links').innerHTML = S.conflicts.filter((c) => c.status === 'open').map((c) => line(c.blocker_spot, c.blocked_spot)).join('')
+    + S.other_conflicts.map((c) => line(c.blocker_spot, c.blocked_spot, 'other')).join('')
     + S.leave_requests.flatMap((r) => r.blockers.map((b) => line(b.spot, r.requester_spot, 'req'))).join('');
 }
 
@@ -1755,7 +1764,17 @@ function relationsHtml(spot) {
   const ahead = aheadOf(spot.id), behind = movesInto(spot.id);
   return `<dl class="kv"><dt>${t('Ausfahrt')}</dt><dd>${esc(wayText(spot))}</dd></dl>`
     + (ahead.length ? `<h3>${t(ahead.length > 1 ? 'Ausfahrt über (einer muss frei sein)' : 'Ausfahrt über')}</h3><div class="list">${ahead.map(line).join('')}</div>` : '')
-    + (behind.length ? `<h3>${t('Fährt über diesen Platz raus')}</h3><div class="list">${behind.map(line).join('')}</div>` : '');
+    + (behind.length ? `<h3>${t('Fährt über diesen Platz raus')}</h3><div class="list">${behind.map(line).join('')}</div>` : '')
+    + otherConflictsHtml(spot);
+}
+
+/** Offene Konflikte anderer Nachbarn an diesem Platz (graue Linien auf der Grafik). */
+function otherConflictsHtml(spot) {
+  const list = (S.other_conflicts ?? []).filter((c) => c.blocker_spot === spot.code || c.blocked_spot === spot.code);
+  if (!list.length) return '';
+  return `<h3>${t('Konflikte anderer hier')}</h3><div class="list">${list.map((c) => `<div class="item"><div class="grow">
+      <b>${t('{a_name} ({a_spot}) steht vor {b_name} ({b_spot})', { a_name: esc(c.blocker_name), a_spot: esc(c.blocker_spot), b_name: esc(c.blocked_name), b_spot: esc(c.blocked_spot) })}</b>
+      <small>${t('{b_name} muss {b_when} raus, {a_name} fährt erst {a_when}.', { b_name: esc(c.blocked_name), b_when: esc(fmtWhen(c.blocked_departs_at)), a_name: esc(c.blocker_name), a_when: c.blocker_departs_at ? esc(fmtWhen(c.blocker_departs_at)) : t('zu unbekannter Zeit') })}</small></div></div>`).join('')}</div>`;
 }
 
 /** Welche Konflikte entstünden, wenn `car` mit Ausfahrt `depIso` auf `spot` parkt? */

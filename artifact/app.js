@@ -275,7 +275,7 @@ function buildState() {
 
   // Konflikte
   const occ = new Map(spots.filter((s) => s.occupant).map((s) => [s.id, { carId: s.occupant.car_id, dep: s.occupant.next_departure ? Date.parse(s.occupant.next_departure.at) : null }]));
-  const conflicts = [], patio_reservations = [];
+  const conflicts = [], other_conflicts = [], patio_reservations = [];
   const allOccupied = new Set(occ.keys());
   for (const { blocker, blocked } of findBlockings(occ)) {
     const a = bySpot[blocker].occupant, b = bySpot[blocked].occupant;
@@ -300,7 +300,7 @@ function buildState() {
     if (uid && (c.blocker_resident_id === uid || c.blocked_resident_id === uid)) {
       c.role = c.blocker_resident_id === uid ? 'blocker' : 'blocked';
       conflicts.push(c);
-    }
+    } else if (status === 'open') other_conflicts.push(c);   // nur als graue Linie auf der Grafik
   }
   conflicts.sort((x, y) => x.blocked_departs_at.localeCompare(y.blocked_departs_at));
 
@@ -328,7 +328,7 @@ function buildState() {
       c.patio_now = c.spot_id && c.patio_route !== 'never' ? patioRoute(c.spot_id, others) : null;
     }
   }
-  return { lot: LOT, zones: ZONES, spots, exits: EXIT_LIST, me, conflicts, leave_requests, patio_reservations };
+  return { lot: LOT, zones: ZONES, spots, exits: EXIT_LIST, me, conflicts, other_conflicts, leave_requests, patio_reservations };
 }
 
 function isRequestActive(q, now = Date.now()) {
@@ -675,6 +675,7 @@ function renderLinks() {
     return `<line class="${cls}" x1="${x1}%" y1="${y1}%" x2="${x2}%" y2="${y2}%"/><circle class="${cls}" cx="${x2}%" cy="${y2}%" r="5"/>`;
   };
   $('#links').innerHTML = S.conflicts.filter((c) => c.status === 'open').map((c) => line(c.blocker_spot, c.blocked_spot)).join('')
+    + S.other_conflicts.map((c) => line(c.blocker_spot, c.blocked_spot, 'other')).join('')
     + S.leave_requests.flatMap((r) => r.blockers.map((b) => line(b.spot, r.requester_spot, 'req'))).join('');
 }
 
@@ -942,7 +943,17 @@ function relationsHtml(spot) {
   const ahead = aheadOf(spot.id), behind = movesInto(spot.id);
   return `<dl class="kv"><dt>${t('Ausfahrt')}</dt><dd>${esc(wayText(spot))}</dd></dl>`
     + (ahead.length ? `<h3>${t(ahead.length > 1 ? 'Ausfahrt über (einer muss frei sein)' : 'Ausfahrt über')}</h3><div class="list">${ahead.map(line).join('')}</div>` : '')
-    + (behind.length ? `<h3>${t('Fährt über diesen Platz raus')}</h3><div class="list">${behind.map(line).join('')}</div>` : '');
+    + (behind.length ? `<h3>${t('Fährt über diesen Platz raus')}</h3><div class="list">${behind.map(line).join('')}</div>` : '')
+    + otherConflictsHtml(spot);
+}
+
+/** Offene Konflikte anderer Nachbarn an diesem Platz (graue Linien auf der Grafik). */
+function otherConflictsHtml(spot) {
+  const list = (S.other_conflicts ?? []).filter((c) => c.blocker_spot === spot.code || c.blocked_spot === spot.code);
+  if (!list.length) return '';
+  return `<h3>${t('Konflikte anderer hier')}</h3><div class="list">${list.map((c) => `<div class="item"><div class="grow">
+      <b>${t('{a_name} ({a_spot}) steht vor {b_name} ({b_spot})', { a_name: esc(c.blocker_name), a_spot: esc(c.blocker_spot), b_name: esc(c.blocked_name), b_spot: esc(c.blocked_spot) })}</b>
+      <small>${t('{b_name} muss {b_when} raus, {a_name} fährt erst {a_when}.', { b_name: esc(c.blocked_name), b_when: esc(fmtWhen(c.blocked_departs_at)), a_name: esc(c.blocker_name), a_when: c.blocker_departs_at ? esc(fmtWhen(c.blocker_departs_at)) : t('zu unbekannter Zeit') })}</small></div></div>`).join('')}</div>`;
 }
 
 /** Welche Konflikte entstünden, wenn `car` mit Ausfahrt `depIso` auf `spot` parkt? */
