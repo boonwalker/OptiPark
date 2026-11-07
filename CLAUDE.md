@@ -63,6 +63,7 @@ python3 -m venv .venv            # auf dem Mac im iCloud-Ordner: .venv.nosync
 
 - **Python 3.9 kompatibel** halten (der Mac des Nutzers hat nur System-Python 3.9): kein `match`, keine `X | Y`-Typen.
 - Backend nur mit Standardbibliothek plus `pywebpush`; App muss auch ohne `pywebpush` starten. Frontend ohne Build-Schritt und ohne externe Bibliotheken.
+- **Git:** Änderungen direkt auf `main` committen und pushen (Wunsch des Nutzers), keine eigenen Zweige und Pull Requests mehr.
 - **Niemals committen:** `data/`, `data.nosync/` (Datenbank mit Anmelde-Tokens, `vapid_private.pem`), virtuelle Umgebungen. Steht in `.gitignore`.
 - Regeln existieren dreifach: `server/rules.py` + `conflicts.py`, Kopie in `web/app.js` (Park-Vorschau) und in `artifact/app.js`. **Änderungen immer an allen Stellen** nachziehen.
 - Bei Regel- oder Datenmodell-Änderungen auch `README.md` und `REPRODUKTION.md` (Schema/Layout wörtlich, Testfälle) aktualisieren.
