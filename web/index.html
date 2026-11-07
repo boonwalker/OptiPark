@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Parkplatz</title>
+  <meta name="theme-color" content="#16191f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" opacity=".18"/><path d="M9 17V7h4.2a3.3 3.3 0 0 1 0 6.6H9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Parkplatz</span>
+    </div>
+    <button class="avatar" id="profileBtn" aria-label="Profil">?</button>
+  </header>
+
+  <main>
+    <section id="status" class="status" aria-live="polite"></section>
+    <section id="conflicts" class="conflicts" aria-live="polite"></section>
+
+    <div class="lot-wrap">
+      <div class="lot" id="lot" role="group" aria-label="Parkplatz">
+        <div class="lot-deco" id="lotDeco" aria-hidden="true"></div>
+        <div class="bays" id="bays"></div>
+        <svg class="links" id="links" aria-hidden="true"></svg>
+        <div class="cars" id="cars" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <p class="legend">
+      <span><i class="dot mine"></i>Dein Auto</span>
+      <span><i class="dot free"></i>Frei – antippen zum Parken</span>
+      <span><i class="dot warn"></i>Konflikt</span>
+    </p>
+  </main>
+
+  <div class="sheet-backdrop" id="backdrop" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" hidden>
+    <div class="sheet-handle"></div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </section>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <template id="carSvg">
+    <svg viewBox="0 0 40 64" class="car-svg">
+      <defs>
+        <linearGradient id="g-shine" x1="0" x2="1">
+          <stop offset="0" stop-color="#000" stop-opacity=".28"/>
+          <stop offset=".35" stop-color="#fff" stop-opacity=".18"/>
+          <stop offset=".65" stop-color="#fff" stop-opacity=".05"/>
+          <stop offset="1" stop-color="#000" stop-opacity=".3"/>
+        </linearGradient>
+      </defs>
+      <!-- Draufsicht, Front oben (Autos parken rückwärts ein) -->
+      <rect class="mirror" x="0.5" y="21" width="5" height="4" rx="1.5"/>
+      <rect class="mirror" x="34.5" y="21" width="5" height="4" rx="1.5"/>
+      <rect class="body" x="3" y="2" width="34" height="60" rx="11"/>
+      <rect x="3" y="2" width="34" height="60" rx="11" fill="url(#g-shine)"/>
+      <path class="glass" d="M10 13.5h20l2.5 9.5h-25z"/>
+      <rect class="roof" x="7" y="25" width="26" height="20" rx="4"/>
+      <rect class="glass" x="7.5" y="47.5" width="25" height="7" rx="3"/>
+      <rect class="head" x="6" y="2.6" width="7" height="2.8" rx="1.2"/>
+      <rect class="head" x="27" y="2.6" width="7" height="2.8" rx="1.2"/>
+      <rect class="tail" x="6" y="58.8" width="7" height="2.6" rx="1.2"/>
+      <rect class="tail" x="27" y="58.8" width="7" height="2.6" rx="1.2"/>
+    </svg>
+  </template>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
