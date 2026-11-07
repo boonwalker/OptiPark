@@ -1084,8 +1084,9 @@ function openProfile() {
     <button class="btn ghost block" id="pfAddCar">+ Auto hinzufügen</button>
     <h3>Benachrichtigungen</h3>
     <p class="hint">Diese Version der App kann keine Push-Nachrichten schicken. Solange die Seite offen ist, siehst du neue Konflikte und Anfragen sofort, und der Tab-Titel zeigt die Anzahl.</p>
-    <h3>Nachbarn einladen</h3>
-    <p class="hint">Teile diese Seite über „Teilen“ mit deinen Nachbarn. Damit sie parken und antworten können, brauchen sie Bearbeitungsrechte, sonst können sie nur zuschauen.</p>`);
+    ${mode === 'demo' ? `<h3>Demo</h3>
+    <p class="hint">Das ist eine Demo: Die Nachbarn sind Beispiele, und was du einträgst, bleibt nur in diesem Fenster. Lädst du die Seite neu, beginnt die Demo von vorn.</p>` : `<h3>Nachbarn einladen</h3>
+    <p class="hint">Teile diese Seite über „Teilen“ mit deinen Nachbarn. Damit sie parken und antworten können, brauchen sie Bearbeitungsrechte, sonst können sie nur zuschauen.</p>`}`);
   $('#pfSave', body).onclick = () => act(() => API.updateMe({ display_name: $('#pfName', body).value, unit: $('#pfUnit', body).value }), 'Gespeichert');
   $$('[data-car]', body).forEach((b) => (b.onclick = () => openCarEditor(myCars().find((c) => c.id === b.dataset.car))));
   $('#pfAddCar', body).onclick = () => openCarEditor();
