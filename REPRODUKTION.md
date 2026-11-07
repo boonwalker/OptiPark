@@ -13,7 +13,7 @@ Claude Code in der iPhone-App arbeitet in einer **Cloud-Umgebung (Linux)**, die 
 
 Falls die Sitzung zwischendurch stoppt: einfach „Mach weiter nach REPRODUKTION.md“ schreiben, der bisherige Stand liegt ja im Branch.
 
-Stand: 07.11.2026. Sprache der App und aller Texte: **Deutsch** (Du-Form).
+Stand: 07.11.2026. Sprache der App: **Deutsch** (Du-Form) als Grundsprache, zusätzlich **Englisch** (Abschnitt „Sprachen“ in 12a). Alle Texte stehen im Code auf Deutsch und werden über eine Übersetzungstabelle ins Englische gebracht.
 
 ---
 
@@ -68,11 +68,12 @@ server/departures.py     nächste Ausfahrt je Auto
 server/conflicts.py      Konflikterkennung + Nachrichtentexte + Erinnerungen
 server/leave_requests.py „Ich will gleich rausfahren“
 server/push.py           Web-Push mit VAPID
+server/i18n.py           Übersetzungen Deutsch → Englisch für Nachrichten und Fehler
 server/db.py             Verbindung, Transaktionen, Init + Seed
 server/app.py            HTTP-API, statische Dateien, Minuten-Ticker
 server/demo.py           Demo-Daten
-web/index.html, styles.css, app.js, sw.js, manifest.webmanifest, icon.svg, icon-180/192/512.png
-tests/__init__.py, tests/test_rules.py, tests/test_leave_requests.py, tests/test_api.py
+web/index.html, styles.css, i18n.js, app.js, sw.js, manifest.webmanifest, icon.svg, icon-180/192/512.png
+tests/__init__.py, tests/test_rules.py, tests/test_leave_requests.py, tests/test_patio.py, tests/test_i18n.py, tests/test_api.py
 ```
 
 ---
@@ -151,6 +152,7 @@ CREATE TABLE IF NOT EXISTS resident (
     display_name  TEXT    NOT NULL,
     unit          TEXT,                       -- Wohnung / Klingel, optional
     auth_token    TEXT    NOT NULL UNIQUE,    -- persönlicher Geräteschlüssel
+    lang          TEXT    NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en')),  -- Sprache für Nachrichten
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -290,7 +292,7 @@ INSERT OR IGNORE INTO meta(key, value) VALUES ('version', '0');
 `db.py`:
 - `connect()`: `isolation_level=None`, `row_factory=sqlite3.Row`, `PRAGMA foreign_keys=ON`, `journal_mode=WAL`.
 - `tx()`: Kontextmanager mit globalem `threading.Lock`, `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`. `read()`: einfache Leseverbindung.
-- `init()`: Ordner anlegen, Schema per `executescript`, dann `_migrate()` (ältere Datenbanken: Spalte `car.patio_route` per `ALTER TABLE` ergänzen; fehlt `conflict.patio_choice`, die abgeleitete Tabelle `conflict` löschen und neu anlegen), beim ersten Mal Seed aus `layout.py` (lot, zones, spots), danach **immer** `rules.load_exits(conn)`.
+- `init()`: Ordner anlegen, Schema per `executescript`, dann `_migrate()` (ältere Datenbanken: Spalten `car.patio_route` und `resident.lang` per `ALTER TABLE` ergänzen; fehlt `conflict.patio_choice`, die abgeleitete Tabelle `conflict` löschen und neu anlegen), beim ersten Mal Seed aus `layout.py` (lot, zones, spots), danach **immer** `rules.load_exits(conn)`.
 - `bump_version(conn)`: erhöht `meta.version` (Clients pollen das).
 - Hilfen: `utcnow()` (ohne Mikrosekunden), `iso(dt)`, `parse_iso(s)`.
 
@@ -608,7 +610,7 @@ Legt (falls noch nicht vorhanden) an und gibt Anmelde-Links `http://localhost:80
 
 ---
 
-## 12. Tests (müssen alle grün sein, aktuell 41)
+## 12. Tests (müssen alle grün sein, aktuell 47)
 
 `tests/test_rules.py` (Hilfsmethode `park(L5=7, L3=9, L4=None)` = Platz → Stunden bis zur Ausfahrt, `None` = unbekannt; Ergebnis als Menge `"Blocker→Blockierter"`):
 
@@ -674,7 +676,20 @@ Diese Tests nutzen ein temporäres `PARK_DATA_DIR` und rollen jede Transaktion z
 
 Ergänzend im API-Test: Nach Schritt 6 parkt Anna neu so, dass Ben auf L6 hinter Anna auf L4 steht; Bens Konflikt hat einen `patio_text`, Anna darf nicht `patio_yes` wählen (409), Ben schon (→ `patio`), danach enthält `patio_reservations` Bens Weg. (Die übrigen Schritte entsprechend anpassen.)
 
-Am Ende: `python -m unittest discover tests -v` → **alle grün** (41 aus den Tabellen oben + der API-Test).
+`tests/test_i18n.py` (Sprachen):
+- `t("en", "{name} steht vor dir", name="Ben")` = „Ben is parked in front of you“; ohne Übersetzung bleibt der deutsche Text; unbekannte Sprache → `de`.
+- `fmt_when` auf Englisch: „tomorrow 13:00“, „Fri 13 Nov 13:00“ (Deutsch „Fr 13.11. 13:00“); `fmt_route(..., "en")` = „reverse onto P1, then out via P2 → L7“.
+- Jede englische Vorlage hat genau dieselben `{platzhalter}` wie die deutsche.
+- Ben (en) L6 7 h, Clara (de) L4 9 h → Ben bekommt „Clara is parked in front of you“ mit „Swap spots this evening?“, Clara „Du blockierst Ben“ mit „Heute Abend tauschen?“.
+- Patio-Rückfrage an Ben (en) enthält „Fallback: reverse onto P1“ und „Does that work for you?“.
+- Rausfahr-Anfrage von Ben (de), Clara (en) im Weg → Titel „Ben wants to leave now“; sofortiges Nachklingeln → `RequestError`, übersetzt „Please wait … more min.“.
+
+Am Ende: `python -m unittest discover tests -v` → **alle grün** (47 aus den Tabellen oben + der API-Test).
+
+### 12a. Sprachen
+
+- **Server** (`server/i18n.py`): Tabelle `EN` (deutscher Text mit `{platzhaltern}` → englischer Text), `t(lang, text, **werte)`, `norm(lang)` (alles außer `de`/`en` → `de`), `lang_of(conn, resident_id)`, `fmt_day(lang, datum, tage_ab_heute)`. Nachrichten (`conflicts._msg`, `leave_requests._msg`/`_blocker_messages`) werden **je Empfänger** in dessen `resident.lang` geschrieben; `fmt_when(..., lang)` und `fmt_route(..., lang)` nehmen die Sprache als letzten Parameter (Standard `de`). `ApiError`/`RequestError` tragen den deutschen Text plus Werte; übersetzt wird beim Antworten nach dem Header `X-Lang` (sonst Sprache des Nachbarn, sonst Deutsch). `patio_text` in `/api/state` in der Sprache der Anfrage. `POST /api/register` nimmt `lang`, `PATCH /api/me` nimmt `{lang}` allein.
+- **Oberfläche** (`web/i18n.js`, vor `app.js` geladen und in die Artefakt-Seite eingebaut): `LANG` = von Hand gewählt (`localStorage park.lang`), sonst Englisch, wenn `navigator.language` mit `en` beginnt, sonst Deutsch. `t(deutscherText, {werte})`, `I18N_EN`, `WD_SHORT`, `fmtDay`, `translateStatic()` für `data-i18n`/`data-i18n-aria` in `index.html`. Im Profil Umschalter „Deutsch / English“ (speichert, meldet die Sprache an den Server, lädt neu). Nach dem ersten Laden gleicht die App `me.lang` mit `LANG` ab, damit Benachrichtigungen in der richtigen Sprache kommen. Bereichsnamen aus der Datenbank werden beim Anzeigen übersetzt („Tür 1 · links“ → „Door 1 · left“).
 
 ---
 
@@ -688,7 +703,7 @@ Die Cloud-Sitzung kann die App bauen und testen, aber **nicht anzeigen**: Der Se
 
 ## 14. Artefakt-Version (optional)
 
-Zusätzlich gibt es eine Version als claude.ai-Artefakt (`artifact/`): dieselbe Oberfläche, aber ohne Python-Server. Daten liegen im gemeinsamen Artefakt-Speicher (`residents/{nutzer-id}` mit Autos und Zeiten, nur selbst schreibbar; `spots/{platz}`; `decisions/{konflikt}`; `requests/{id}`), Identität über das Claude-Konto, alle Regeln (Wegenetz, Konflikte, Notweg) werden in der Seite berechnet. Keine Push-Nachrichten, stattdessen Hinweise in der offenen Seite. Ohne Speicher zeigt sie eine gekennzeichnete Demo. `artifact/build.py` setzt die Seite aus `web/styles.css`, `web/index.html` und `artifact/app.js` zusammen.
+Zusätzlich gibt es eine Version als claude.ai-Artefakt (`artifact/`): dieselbe Oberfläche, aber ohne Python-Server. Daten liegen im gemeinsamen Artefakt-Speicher (`residents/{nutzer-id}` mit Autos und Zeiten, nur selbst schreibbar; `spots/{platz}`; `decisions/{konflikt}`; `requests/{id}`), Identität über das Claude-Konto, alle Regeln (Wegenetz, Konflikte, Notweg) werden in der Seite berechnet. Keine Push-Nachrichten, stattdessen Hinweise in der offenen Seite. Ohne Speicher zeigt sie eine gekennzeichnete Demo. `artifact/build.py` setzt die Seite aus `web/styles.css`, `web/index.html`, `web/i18n.js` und `artifact/app.js` zusammen.
 
 ## 15. Offene Punkte
 

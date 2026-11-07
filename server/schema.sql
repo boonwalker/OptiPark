@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS resident (
     display_name  TEXT    NOT NULL,
     unit          TEXT,                       -- Wohnung / Klingel, optional
     auth_token    TEXT    NOT NULL UNIQUE,    -- persönlicher Geräteschlüssel
+    lang          TEXT    NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en')),  -- Sprache für Nachrichten
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 

@@ -16,9 +16,9 @@
   <header class="topbar">
     <div class="brand">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" opacity=".18"/><path d="M9 17V7h4.2a3.3 3.3 0 0 1 0 6.6H9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Parkplatz</span>
+      <span data-i18n>Parkplatz</span>
     </div>
-    <button class="avatar" id="profileBtn" aria-label="Profil">?</button>
+    <button class="avatar" id="profileBtn" aria-label="Profil" data-i18n-aria>?</button>
   </header>
 
   <main>
@@ -26,7 +26,7 @@
     <section id="conflicts" class="conflicts" aria-live="polite"></section>
 
     <div class="lot-wrap">
-      <div class="lot" id="lot" role="group" aria-label="Parkplatz">
+      <div class="lot" id="lot" role="group" aria-label="Parkplatz" data-i18n-aria>
         <div class="lot-deco" id="lotDeco" aria-hidden="true"></div>
         <div class="bays" id="bays"></div>
         <svg class="links" id="links" aria-hidden="true"></svg>
@@ -35,9 +35,9 @@
     </div>
 
     <p class="legend">
-      <span><i class="dot mine"></i>Dein Auto</span>
-      <span><i class="dot free"></i>Frei – antippen zum Parken</span>
-      <span><i class="dot warn"></i>Konflikt</span>
+      <span><i class="dot mine"></i><span data-i18n>Dein Auto</span></span>
+      <span><i class="dot free"></i><span data-i18n>Frei – antippen zum Parken</span></span>
+      <span><i class="dot warn"></i><span data-i18n>Konflikt</span></span>
     </p>
   </main>
 
@@ -74,6 +74,7 @@
     </svg>
   </template>
 
+  <script src="/i18n.js"></script>
   <script src="/app.js" type="module"></script>
 </body>
 </html>

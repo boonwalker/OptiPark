@@ -13,7 +13,7 @@ Ablauf:
 """
 from datetime import timedelta
 
-from . import rules
+from . import i18n, rules
 from .db import iso, parse_iso
 
 PING_COOLDOWN = timedelta(minutes=3)
@@ -22,9 +22,10 @@ ETA_LATER = 15  # Minuten für „Dauert etwas“
 
 
 class RequestError(Exception):
-    def __init__(self, status, message):
+    """message ist der deutsche Text (mit {platzhaltern}), values die Werte dazu."""
+    def __init__(self, status, message, **values):
         super().__init__(message)
-        self.status, self.message = status, message
+        self.status, self.message, self.values = status, message, values
 
 
 def _parked(conn):
@@ -47,24 +48,28 @@ def _needed(conn, parking_id, parked=None):
     return me, [[parked[s] for s in sorted(layer, key=lambda s: parked[s]["spot"])] for layer in layers]
 
 
-def _msg(resident_id, title, body, rid):
-    return {"resident_id": resident_id, "title": title, "body": body,
+def _msg(conn, resident_id, rid, title, body, **values):
+    lang = i18n.lang_of(conn, resident_id)
+    return {"resident_id": resident_id, "title": i18n.t(lang, title, **values), "body": i18n.t(lang, body, **values),
             "url": f"/#raus-{rid}", "tag": f"leave-{rid}"}
 
 
-def _blocker_messages(me, layers, only_pids, rid, reminder=False):
+def _blocker_messages(conn, me, layers, only_pids, rid, reminder=False):
     out = []
     for layer in layers:
         for b in layer:
             if b["pid"] not in only_pids or b["resident_id"] == me["resident_id"]:
                 continue
+            lang = i18n.lang_of(conn, b["resident_id"])
             alt = [o for o in layer if o["pid"] != b["pid"]]
-            body = (f"Dein {b['car']} auf {b['spot']} steht {me['name']} ({me['spot']}) im Weg. "
-                    f"Bitte kurz umparken.")
+            body = i18n.t(lang, "Dein {car} auf {spot} steht {name} ({their_spot}) im Weg. Bitte kurz umparken.",
+                          car=b["car"], spot=b["spot"], name=me["name"], their_spot=me["spot"])
             if alt:
-                body += " Alternativ könnte auch " + " oder ".join(f"{o['name']} ({o['spot']})" for o in alt) + " Platz machen."
-            title = f"Erinnerung: {me['name']} wartet" if reminder else f"{me['name']} will gleich rausfahren"
-            out.append(_msg(b["resident_id"], title, body, rid))
+                who = i18n.t(lang, " oder ").join(f"{o['name']} ({o['spot']})" for o in alt)
+                body += i18n.t(lang, " Alternativ könnte auch {who} Platz machen.", who=who)
+            title = i18n.t(lang, "Erinnerung: {name} wartet" if reminder else "{name} will gleich rausfahren", name=me["name"])
+            out.append({"resident_id": b["resident_id"], "title": title, "body": body,
+                        "url": f"/#raus-{rid}", "tag": f"leave-{rid}"})
     return out
 
 
@@ -82,7 +87,7 @@ def create(conn, parking_id, now):
     pids = {b["pid"] for layer in layers for b in layer}
     conn.executemany("INSERT INTO leave_request_blocker(request_id, parking_id) VALUES (?, ?)",
                      [(rid, p) for p in pids])
-    return rid, _blocker_messages(me, layers, pids, rid)
+    return rid, _blocker_messages(conn, me, layers, pids, rid)
 
 
 def _open_request(conn, rid):
@@ -101,13 +106,13 @@ def ping(conn, rid, now):
     r = _open_request(conn, rid)
     wait = parse_iso(r["last_pinged_at"]) + PING_COOLDOWN - now
     if wait.total_seconds() > 0:
-        raise RequestError(429, f"Bitte noch {int(wait.total_seconds() // 60) + 1} Min. warten")
+        raise RequestError(429, "Bitte noch {n} Min. warten", n=int(wait.total_seconds() // 60) + 1)
     conn.execute("UPDATE leave_request SET last_pinged_at = ? WHERE id = ?", (iso(now), rid))
     me, layers = _needed(conn, r["parking_id"])
     coming = {row[0] for row in conn.execute(
         "SELECT parking_id FROM leave_request_blocker WHERE request_id = ? AND response = 'coming'", (rid,))}
     pids = {b["pid"] for layer in layers for b in layer} - coming
-    return _blocker_messages(me, layers, pids, rid, reminder=True)
+    return _blocker_messages(conn, me, layers, pids, rid, reminder=True)
 
 
 def cancel(conn, rid, now):
@@ -126,8 +131,9 @@ def respond(conn, rid, blocker_parking_id, response, now):
     who = conn.execute("""SELECT r.display_name, s.code FROM parking p JOIN car c ON c.id = p.car_id
                           JOIN resident r ON r.id = c.resident_id JOIN spot s ON s.id = p.spot_id
                           WHERE p.id = ?""", (blocker_parking_id,)).fetchone()
-    title = f"{who[0]} kommt sofort" if response == "coming" else f"{who[0]} braucht noch ~{ETA_LATER} Min."
-    return [_msg(requester_resident(conn, rid), title, f"Auto auf {who[1]} wird umgeparkt.", rid)]
+    title = "{name} kommt sofort" if response == "coming" else "{name} braucht noch ~{n} Min."
+    return [_msg(conn, requester_resident(conn, rid), rid, title, "Auto auf {spot} wird umgeparkt.",
+                 name=who[0], n=ETA_LATER, spot=who[1])]
 
 
 def reconcile(conn, now):
@@ -140,7 +146,7 @@ def reconcile(conn, now):
             status = "cleared"
         elif not layers:
             status = "cleared"
-            notes.append(_msg(me["resident_id"], "Weg ist frei 🚗", "Du kannst jetzt rausfahren.", r["id"]))
+            notes.append(_msg(conn, me["resident_id"], r["id"], "Weg ist frei 🚗", "Du kannst jetzt rausfahren."))
         elif now - parse_iso(r["created_at"]) > EXPIRE_AFTER:
             status = "expired"
         else:
@@ -150,7 +156,7 @@ def reconcile(conn, now):
             if new:
                 conn.executemany("INSERT INTO leave_request_blocker(request_id, parking_id) VALUES (?, ?)",
                                  [(r["id"], p) for p in new])
-                notes += _blocker_messages(me, layers, new, r["id"])
+                notes += _blocker_messages(conn, me, layers, new, r["id"])
             continue
         conn.execute("UPDATE leave_request SET status = ?, closed_at = ? WHERE id = ?", (status, iso(now), r["id"]))
     return notes

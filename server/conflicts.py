@@ -26,7 +26,7 @@ import json
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from . import rules
+from . import i18n, rules
 from .db import iso, parse_iso
 from .departures import next_departures
 
@@ -34,26 +34,23 @@ HORIZON = timedelta(hours=36)       # so weit im Voraus wird gewarnt
 REMIND_BEFORE = timedelta(minutes=45)
 ACTIVE = ("open", "swap_agreed", "acknowledged", "patio")
 
-WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-
-
-def fmt_when(dt, now, tz):
+def fmt_when(dt, now, tz, lang="de"):
     if dt is None:
-        return "unbekannt"
+        return i18n.t(lang, "unbekannt")
     local, today = dt.astimezone(tz), now.astimezone(tz).date()
-    days = (local.date() - today).days
-    prefix = {0: "heute", 1: "morgen", 2: "übermorgen"}.get(days, WEEKDAYS[local.weekday()] + " " + local.strftime("%d.%m."))
-    return f"{prefix} {local:%H:%M}"
+    return f"{i18n.fmt_day(lang, local.date(), (local.date() - today).days)} {local:%H:%M}"
 
 
-def fmt_route(route_json):
+def fmt_route(route_json, lang="de"):
     """{"reverse": ["P1"], "forward": ["P2", "L7"]} → „rückwärts auf P1, dann über P2 → L7 hinaus“."""
     if not route_json:
         return ""
     r = json.loads(route_json) if isinstance(route_json, str) else route_json
     back = r["reverse"]
-    text = "rückwärts " + (f"über {' → '.join(back[:-1])} auf {back[-1]}" if len(back) > 1 else f"auf {back[-1]}")
-    return text + (f", dann über {' → '.join(r['forward'])} hinaus" if r["forward"] else ", dann hinaus")
+    text = (i18n.t(lang, "rückwärts über {via} auf {to}", via=" → ".join(back[:-1]), to=back[-1]) if len(back) > 1
+            else i18n.t(lang, "rückwärts auf {to}", to=back[-1]))
+    return text + (i18n.t(lang, ", dann über {via} hinaus", via=" → ".join(r["forward"])) if r["forward"]
+                   else i18n.t(lang, ", dann hinaus"))
 
 
 def derive_status(blocker_choice, blocked_choice, patio_route, patio_choice):
@@ -184,35 +181,42 @@ def _tz(conn):
     return ZoneInfo(conn.execute("SELECT timezone FROM lot LIMIT 1").fetchone()[0])
 
 
-def _msg(resident_id, title, body, cid):
-    return {"resident_id": resident_id, "title": title, "body": body,
+def _msg(conn, resident_id, cid, title, body, **values):
+    """Nachricht in der Sprache des Empfängers. Werte, die selbst übersetzt werden
+    müssen (Zeiten, Wege), werden als Funktion lang → Text übergeben."""
+    lang = i18n.lang_of(conn, resident_id)
+    vals = {k: (v(lang) if callable(v) else v) for k, v in values.items()}
+    text = lambda parts: "".join(i18n.t(lang, p, **vals) for p in ([parts] if isinstance(parts, str) else parts))
+    return {"resident_id": resident_id, "title": text(title), "body": text(body),
             "url": f"/#konflikt-{cid}", "tag": f"conflict-{cid}"}
+
+
+def _when(iso_str, now, tz):
+    return lambda lang: fmt_when(parse_iso(iso_str), now, tz, lang)
 
 
 def _new_conflict_messages(conn, cid, now):
     d, tz = conflict_details(conn, cid), _tz(conn)
-    b_when = fmt_when(parse_iso(d["blocked_departs_at"]), now, tz)
-    a_when = fmt_when(parse_iso(d["blocker_departs_at"]), now, tz)
-    if d["blocker_resident_id"] == d["blocked_resident_id"]:
-        return [_msg(d["blocker_resident_id"], "Du stehst dir selbst im Weg",
-                     f"{d['blocked_car']} ({d['blocked_spot']}) muss {b_when} raus, "
-                     f"{d['blocker_car']} ({d['blocker_spot']}) steht davor.", cid)]
+    v = dict(a_name=d["blocker_name"], a_car=d["blocker_car"], a_spot=d["blocker_spot"],
+             b_name=d["blocked_name"], b_car=d["blocked_car"], b_spot=d["blocked_spot"],
+             b_when=_when(d["blocked_departs_at"], now, tz), a_when=_when(d["blocker_departs_at"], now, tz))
+    a, b = d["blocker_resident_id"], d["blocked_resident_id"]
+    if a == b:
+        return [_msg(conn, a, cid, "Du stehst dir selbst im Weg",
+                     "{b_car} ({b_spot}) muss {b_when} raus, {a_car} ({a_spot}) steht davor.", **v)]
+    to_a = "{b_name} muss {b_when} raus ({b_spot}), du fährst erst {a_when}."
+    to_b = "Du musst {b_when} raus, {a_name} ({a_spot}) fährt erst {a_when}."
     if d["patio_route"]:
+        route = lambda lang: fmt_route(d["patio_route"], lang)
         return [
-            _msg(d["blocker_resident_id"], f"Du blockierst {d['blocked_name']}",
-                 f"{d['blocked_name']} muss {b_when} raus ({d['blocked_spot']}), du fährst erst {a_when}. "
-                 f"{d['blocked_name']} wird gefragt, ob der Patio-Notweg in Frage kommt.", cid),
-            _msg(d["blocked_resident_id"], f"{d['blocker_name']} steht vor dir",
-                 f"Du musst {b_when} raus, {d['blocker_name']} ({d['blocker_spot']}) fährt erst {a_when}. "
-                 f"Notlösung: {fmt_route(d['patio_route'])}. Kommt das für dich in Frage?", cid),
+            _msg(conn, a, cid, "Du blockierst {name}", [to_a, " ", "{name} wird gefragt, ob der Patio-Notweg in Frage kommt."],
+                 name=d["blocked_name"], **v),
+            _msg(conn, b, cid, "{name} steht vor dir", [to_b, " ", "Notlösung: {route}. Kommt das für dich in Frage?"],
+                 name=d["blocker_name"], route=route, **v),
         ]
     return [
-        _msg(d["blocker_resident_id"], f"Du blockierst {d['blocked_name']}",
-             f"{d['blocked_name']} muss {b_when} raus ({d['blocked_spot']}), du fährst erst {a_when}. "
-             f"Heute Abend tauschen?", cid),
-        _msg(d["blocked_resident_id"], f"{d['blocker_name']} steht vor dir",
-             f"Du musst {b_when} raus, {d['blocker_name']} ({d['blocker_spot']}) fährt erst {a_when}. "
-             f"Heute Abend tauschen?", cid),
+        _msg(conn, a, cid, "Du blockierst {name}", [to_a, " ", "Heute Abend tauschen?"], name=d["blocked_name"], **v),
+        _msg(conn, b, cid, "{name} steht vor dir", [to_b, " ", "Heute Abend tauschen?"], name=d["blocker_name"], **v),
     ]
 
 
@@ -222,18 +226,19 @@ def patio_messages(conn, cid):
     if d["blocker_resident_id"] == d["blocked_resident_id"]:
         return []
     if d["patio_choice"] == "yes":
-        return [_msg(d["blocker_resident_id"], f"{d['blocked_name']} weicht übers Patio aus",
-                     "Du musst nichts tun.", cid)]
-    return [_msg(d["blocker_resident_id"], f"{d['blocked_name']} kann nicht übers Patio ausweichen",
-                 f"{d['blocker_spot']} steht vor {d['blocked_spot']}. Heute Abend tauschen?", cid)]
+        return [_msg(conn, d["blocker_resident_id"], cid, "{name} weicht übers Patio aus", "Du musst nichts tun.",
+                     name=d["blocked_name"])]
+    return [_msg(conn, d["blocker_resident_id"], cid, "{name} kann nicht übers Patio ausweichen",
+                 "{a_spot} steht vor {b_spot}. Heute Abend tauschen?",
+                 name=d["blocked_name"], a_spot=d["blocker_spot"], b_spot=d["blocked_spot"])]
 
 
 def _patio_lost_messages(conn, cid):
     d = conflict_details(conn, cid)
-    body = (f"{d['blocked_name']} kommt nicht mehr übers Patio raus. "
-            f"Bitte klärt den Konflikt ({d['blocker_spot']} ↔ {d['blocked_spot']}).")
     ids = {d["blocker_resident_id"], d["blocked_resident_id"]}
-    return [_msg(r, "Patio-Notweg ist versperrt", body, cid) for r in ids]
+    return [_msg(conn, r, cid, "Patio-Notweg ist versperrt",
+                 "{name} kommt nicht mehr übers Patio raus. Bitte klärt den Konflikt ({a_spot} ↔ {b_spot}).",
+                 name=d["blocked_name"], a_spot=d["blocker_spot"], b_spot=d["blocked_spot"]) for r in ids]
 
 
 def choice_messages(conn, cid, actor_role, now):
@@ -241,21 +246,21 @@ def choice_messages(conn, cid, actor_role, now):
     d = conflict_details(conn, cid)
     other_id = d["blocked_resident_id"] if actor_role == "blocker" else d["blocker_resident_id"]
     actor = d["blocker_name"] if actor_role == "blocker" else d["blocked_name"]
+    spots = dict(a_spot=d["blocker_spot"], b_spot=d["blocked_spot"])
     if d["blocker_resident_id"] == d["blocked_resident_id"]:
         return []
     if d["status"] == "swap_agreed":
         both = [d["blocker_resident_id"], d["blocked_resident_id"]]
-        return [_msg(r, "Tausch vereinbart",
-                     f"{d['blocker_spot']} ↔ {d['blocked_spot']}: Bitte heute noch umparken und "
-                     f"in der App „Getauscht“ tippen.", cid) for r in both]
+        return [_msg(conn, r, cid, "Tausch vereinbart",
+                     "{a_spot} ↔ {b_spot}: Bitte heute noch umparken und in der App „Getauscht“ tippen.", **spots)
+                for r in both]
     choice = d[f"{actor_role}_choice"]
     if choice == "swap":
-        return [_msg(other_id, f"{actor} möchte tauschen",
-                     f"{d['blocker_spot']} ↔ {d['blocked_spot']} – bist du einverstanden?", cid)]
+        return [_msg(conn, other_id, cid, "{name} möchte tauschen", "{a_spot} ↔ {b_spot} – bist du einverstanden?",
+                     name=actor, **spots)]
     if actor_role == "blocker" and choice == "manual":
-        when = fmt_when(parse_iso(d["blocked_departs_at"]), now, _tz(conn))
-        return [_msg(other_id, f"{actor} lässt dich raus",
-                     f"{actor} fährt {when} rechtzeitig zur Seite.", cid)]
+        return [_msg(conn, other_id, cid, "{name} lässt dich raus", "{name} fährt {when} rechtzeitig zur Seite.",
+                     name=actor, when=_when(d["blocked_departs_at"], now, _tz(conn)))]
     return []
 
 
@@ -268,9 +273,9 @@ def _due_reminders(conn, now):
     out = []
     for r in due:
         d = conflict_details(conn, r["id"])
-        when = fmt_when(parse_iso(d["blocked_departs_at"]), now, _tz(conn))
-        out.append(_msg(d["blocker_resident_id"], f"Gleich: {d['blocked_name']} muss raus",
-                        f"{d['blocked_car']} auf {d['blocked_spot']} fährt {when} – "
-                        f"dein Auto auf {d['blocker_spot']} steht davor.", r["id"]))
+        out.append(_msg(conn, d["blocker_resident_id"], r["id"], "Gleich: {name} muss raus",
+                        "{b_car} auf {b_spot} fährt {when} – dein Auto auf {a_spot} steht davor.",
+                        name=d["blocked_name"], b_car=d["blocked_car"], b_spot=d["blocked_spot"],
+                        a_spot=d["blocker_spot"], when=_when(d["blocked_departs_at"], now, _tz(conn))))
         conn.execute("UPDATE conflict SET reminded_at = ? WHERE id = ?", (iso(now), r["id"]))
     return out

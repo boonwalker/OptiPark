@@ -39,8 +39,9 @@ server/
   conflicts.py    Konflikterkennung, Benachrichtigungstexte, Erinnerungen
   leave_requests.py  „Ich will gleich rausfahren“: Anfrage, Antworten, Nachklingeln
   push.py         Web-Push (VAPID-Schlüssel werden automatisch erzeugt)
+  i18n.py         Englische Übersetzungen der Nachrichten und Fehlermeldungen
   app.py          HTTP-API + statische Dateien + Minuten-Ticker
-web/              Frontend (PWA, ohne Build-Schritt)
+web/              Frontend (PWA, ohne Build-Schritt); Übersetzungen in web/i18n.js
 tests/            Regel-Tests: .venv.nosync/bin/python -m unittest discover tests
 ```
 

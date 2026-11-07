@@ -3,7 +3,7 @@
 App für den Anwohner-Parkplatz am Wohnhaus einer Bekannten des Nutzers. Autos parken teils hintereinander und blockieren sich. Jeder Nachbar tippt nach dem Parken auf seinen Stellplatz und hinterlegt, wann er wieder losfährt. Die App erkennt Konflikte („A steht vor B, B muss um 7 raus, A erst um 9“), benachrichtigt beide und lässt sie einen Tausch am Vorabend vereinbaren.
 
 - **In erster Linie eine mobile App fürs Smartphone.** Alles zuerst für Handy-Breite (ca. 375 px) gestalten und dort prüfen; Bedienung mit dem Daumen (große Tippflächen, wichtige Knöpfe unten, Bottom-Sheets statt Dialoge), Rand-Abstände für Notch und Home-Leiste beachten. Heute ist es eine installierbare Web-App (PWA, „Zum Home-Bildschirm“); Desktop ist zweitrangig. Ob später eine native App für App Store / Play Store kommt, vorher mit dem Nutzer klären.
-- **Sprache:** Oberfläche, Nachrichten, Kommentare und Kommunikation mit dem Nutzer auf **Deutsch**, Nutzer in der App per **Du**.
+- **Sprache:** Kommentare und Kommunikation mit dem Nutzer auf **Deutsch**. Die App ist **zweisprachig**: Deutsch (Grundsprache, Nutzer per **Du**) und Englisch. Sprache automatisch nach dem Handy (Englisch, wenn das Handy Englisch spricht, sonst Deutsch), im Profil umschaltbar. Benachrichtigungen bekommt jeder Nachbar in seiner Sprache (`resident.lang`).
 - **Nutzer:** kein Entwickler. Erklärungen einfach halten, Fachbegriffe vermeiden. Bei unklaren Parkplatz-Regeln **nachfragen statt raten**, mit kleinen Skizzen der Optionen. Der Nutzer kennt den Parkplatz, du nicht.
 
 ## Aufbau
@@ -17,10 +17,11 @@ server/          Python-Backend (fast nur Standardbibliothek, http.server + sqli
   conflicts.py     Konflikterkennung, Nachrichtentexte, Erinnerungen
   leave_requests.py  „Ich will gleich rausfahren“
   push.py          Web-Push (VAPID)
+  i18n.py          englische Übersetzungen für Nachrichten und Fehlermeldungen
   app.py           HTTP-API, statische Dateien, Minuten-Ticker
   demo.py          Demo-Nachbarn
-web/             Frontend als PWA ohne Build-Schritt (index.html, styles.css, app.js, sw.js)
-tests/           unittest: test_rules.py, test_leave_requests.py, test_patio.py
+web/             Frontend als PWA ohne Build-Schritt (index.html, styles.css, i18n.js, app.js, sw.js)
+tests/           unittest: test_rules.py, test_leave_requests.py, test_patio.py, test_i18n.py
 artifact/        Version als claude.ai-Artefakt (siehe unten)
 docs/            Demo als GitHub-Pages-Seite (gebaut mit artifact/build.py --standalone)
 REPRODUKTION.md  vollständige Bauanleitung (Datenmodell und Layout wörtlich, alle Texte, alle Testfälle)
@@ -36,8 +37,8 @@ python3 -m venv .venv            # auf dem Mac im iCloud-Ordner: .venv.nosync
 .venv/bin/python -m unittest discover tests -v
 ```
 
-- Vor jeder Übergabe: **alle Tests grün** (aktuell 41). Neue Regeln bekommen neue Testfälle.
-- Frontend-Syntax prüfen, falls `node` da ist: `node --check web/app.js artifact/app.js`.
+- Vor jeder Übergabe: **alle Tests grün** (aktuell 47). Neue Regeln bekommen neue Testfälle.
+- Frontend-Syntax prüfen, falls `node` da ist: `node --check web/app.js web/i18n.js artifact/app.js`.
 - Datenordner: `PARK_DATA_DIR` (Standard `data.nosync/`). Ältere Datenbanken migriert `db._migrate()` beim Start.
 
 ## Parkplatz und Regeln (mit dem Nutzer festgelegt, nicht ohne Rückfrage ändern)
@@ -66,10 +67,11 @@ python3 -m venv .venv            # auf dem Mac im iCloud-Ordner: .venv.nosync
 - Regeln existieren dreifach: `server/rules.py` + `conflicts.py`, Kopie in `web/app.js` (Park-Vorschau) und in `artifact/app.js`. **Änderungen immer an allen Stellen** nachziehen.
 - Bei Regel- oder Datenmodell-Änderungen auch `README.md` und `REPRODUKTION.md` (Schema/Layout wörtlich, Testfälle) aktualisieren.
 - Nachrichtentexte sind kurz, konkret und nennen Namen, Platz und Uhrzeit („Ben muss morgen 07:00 raus (L6), du fährst erst morgen 09:00.“).
+- **Texte immer zweisprachig:** im Code auf Deutsch mit `{platzhaltern}` über `t()` schreiben und die englische Fassung eintragen, in `web/i18n.js` (Oberfläche, beide App-Versionen) bzw. `server/i18n.py` (Benachrichtigungen, Fehler). Nie Texte mit `+` zusammenstückeln, die Satzstellung ist im Englischen anders.
 
 ## Artefakt-Version (`artifact/`)
 
-Dieselbe Oberfläche als claude.ai-Artefakt, ohne Server: Daten im gemeinsamen Artefakt-Speicher (`residents/{nutzer-id}` nur selbst schreibbar, `spots`, `decisions`, `requests`), Identität über das Claude-Konto, alle Regeln in der Seite. Keine Push-Nachrichten (Hinweise nur in der offenen Seite). `python3 artifact/build.py web artifact/parkplatz.html` setzt die Seite aus `web/styles.css`, `web/index.html` und `artifact/app.js` zusammen. Für GitHub Pages: `python3 artifact/build.py web docs/index.html --standalone` (läuft dort nur als Demo ohne gemeinsamen Speicher). Das bisher veröffentlichte Artefakt gehört einem anderen Claude-Account; aus einem anderen Account entstünde ein neues Artefakt mit eigenem Link.
+Dieselbe Oberfläche als claude.ai-Artefakt, ohne Server: Daten im gemeinsamen Artefakt-Speicher (`residents/{nutzer-id}` nur selbst schreibbar, `spots`, `decisions`, `requests`), Identität über das Claude-Konto, alle Regeln in der Seite. Keine Push-Nachrichten (Hinweise nur in der offenen Seite). `python3 artifact/build.py web artifact/parkplatz.html` setzt die Seite aus `web/styles.css`, `web/index.html`, `web/i18n.js` und `artifact/app.js` zusammen. Für GitHub Pages: `python3 artifact/build.py web docs/index.html --standalone` (läuft dort nur als Demo ohne gemeinsamen Speicher). Das bisher veröffentlichte Artefakt gehört einem anderen Claude-Account; aus einem anderen Account entstünde ein neues Artefakt mit eigenem Link.
 
 ## Offene Punkte
 

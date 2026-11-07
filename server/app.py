@@ -14,7 +14,7 @@ from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from . import conflicts, db, leave_requests, push, rules
+from . import conflicts, db, i18n, leave_requests, push, rules
 from .db import iso, parse_iso, utcnow
 from .departures import next_departures
 
@@ -28,9 +28,10 @@ log = logging.getLogger("app")
 
 
 class ApiError(Exception):
-    def __init__(self, status, message):
+    """message ist der deutsche Text (mit {platzhaltern}); übersetzt wird beim Antworten."""
+    def __init__(self, status, message, **values):
         super().__init__(message)
-        self.status, self.message = status, message
+        self.status, self.message, self.values = status, message, values
 
 
 # ---------------------------------------------------------------------------
@@ -70,9 +71,9 @@ def housekeeping(conn, now):
     return conflicts.recompute(conn, now) + leave_requests.reconcile(conn, now)
 
 
-def require(cond, status, message):
+def require(cond, status, message, **values):
     if not cond:
-        raise ApiError(status, message)
+        raise ApiError(status, message, **values)
 
 
 def own_car(ctx, car_id):
@@ -83,7 +84,7 @@ def own_car(ctx, car_id):
 
 def text(body, key, max_len=60, required=False):
     v = (body.get(key) or "").strip()
-    require(v or not required, 400, f"„{key}“ fehlt")
+    require(v or not required, 400, "„{key}“ fehlt", key=key)
     return v[:max_len] or None
 
 
@@ -166,7 +167,7 @@ def get_state(ctx):
             c["planned"] = [dict(r) for r in conn.execute(
                 "SELECT id, depart_at, note FROM planned_departure WHERE car_id = ? AND depart_at > ? ORDER BY depart_at",
                 (c["id"], iso(now)))]
-        result["me"] = {"id": me["id"], "display_name": me["display_name"], "unit": me["unit"],
+        result["me"] = {"id": me["id"], "display_name": me["display_name"], "unit": me["unit"], "lang": me["lang"],
                         "cars": my_cars,
                         "push_subscriptions": conn.execute(
                             "SELECT COUNT(*) FROM push_subscription WHERE resident_id = ?", (me["id"],)).fetchone()[0]}
@@ -181,7 +182,7 @@ def get_state(ctx):
         for cid in ids:
             d = dict(conflicts.conflict_details(conn, cid))
             d["role"] = "blocker" if d["blocker_resident_id"] == me["id"] else "blocked"
-            d["patio_text"] = conflicts.fmt_route(d["patio_route"])
+            d["patio_text"] = conflicts.fmt_route(d["patio_route"], ctx["lang"])
             result["conflicts"].append(d)
         result["leave_requests"] = leave_requests.for_resident(conn, me["id"], now)
         # Zugesagte Patio-Notwege: wer hier parkt, versperrt sie
@@ -195,7 +196,7 @@ def get_state(ctx):
             route = json.loads(r["patio_route"])
             result["patio_reservations"].append({"resident_id": r["resident_id"], "name": r["name"], "from_spot": r["spot"], "at": r["blocked_departs_at"],
                                                  "spots": route["reverse"] + route["forward"],
-                                                 "text": conflicts.fmt_route(route)})
+                                                 "text": conflicts.fmt_route(route, ctx["lang"])})
         return result
 
 
@@ -213,8 +214,8 @@ def register(ctx):
     token = secrets.token_urlsafe(24)
     lot_id = ctx["conn"].execute("SELECT id FROM lot LIMIT 1").fetchone()[0]
     rid = ctx["conn"].execute(
-        "INSERT INTO resident(lot_id, display_name, unit, auth_token) VALUES (?,?,?,?)",
-        (lot_id, name, text(body, "unit", 30), token)).lastrowid
+        "INSERT INTO resident(lot_id, display_name, unit, auth_token, lang) VALUES (?,?,?,?,?)",
+        (lot_id, name, text(body, "unit", 30), token, i18n.norm(body.get("lang") or ctx["lang"]))).lastrowid
     return {"id": rid, "token": token}
 
 
@@ -222,8 +223,12 @@ def register(ctx):
 @mutation
 def update_me(ctx):
     b = ctx["body"]
-    ctx["conn"].execute("UPDATE resident SET display_name = COALESCE(?, display_name), unit = ? WHERE id = ?",
-                        (text(b, "display_name", 40), text(b, "unit", 30), ctx["me"]["id"]))
+    if "lang" in b:   # nur die Sprache ändern (die App gleicht sie beim Start ab)
+        require(b["lang"] in i18n.LANGS, 400, "Ungültige Sprache")
+        ctx["conn"].execute("UPDATE resident SET lang = ? WHERE id = ?", (b["lang"], ctx["me"]["id"]))
+    if "display_name" in b or "unit" in b:
+        ctx["conn"].execute("UPDATE resident SET display_name = COALESCE(?, display_name), unit = ? WHERE id = ?",
+                            (text(b, "display_name", 40), text(b, "unit", 30), ctx["me"]["id"]))
     return {"ok": True}
 
 
@@ -504,7 +509,7 @@ def push_unsubscribe(ctx):
 @route("POST", "/api/push/test")
 def push_test(ctx):
     push.send_async([{"resident_id": ctx["me"]["id"], "title": "Test 🚗",
-                      "body": "Push-Nachrichten funktionieren.", "url": "/", "tag": "test"}])
+                      "body": i18n.t(ctx["lang"], "Push-Nachrichten funktionieren."), "url": "/", "tag": "test"}])
     return {"ok": True}
 
 
@@ -525,29 +530,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method):
         path = urlparse(self.path).path
+        # Sprache dieser Anfrage: Header der App, sonst die gespeicherte des Nachbarn, sonst Deutsch
+        lang = self.headers.get("X-Lang")
         if not path.startswith("/api/"):
-            return self._static(path) if method == "GET" else self._json(405, {"error": "Methode nicht erlaubt"})
+            return self._static(path) if method == "GET" else self._json(405, {"error": i18n.t(i18n.norm(lang), "Methode nicht erlaubt")})
         try:
             for m, regex, fn, auth in ROUTES:
                 match = regex.match(path)
                 if m == method and match:
-                    ctx = {"me": self._auth(), "body": self._body()}
+                    me = self._auth()
+                    lang = i18n.norm(lang if lang in i18n.LANGS else (me or {}).get("lang"))
+                    ctx = {"me": me, "lang": lang}
+                    ctx["body"] = self._body()
                     if auth and not ctx["me"]:
                         raise ApiError(401, "Bitte zuerst anmelden")
                     return self._json(200, fn(ctx, **match.groupdict()))
             raise ApiError(404, "Unbekannter Endpunkt")
         except (ApiError, leave_requests.RequestError) as e:
-            self._json(e.status, {"error": e.message})
+            self._json(e.status, {"error": i18n.t(i18n.norm(lang), e.message, **e.values)})
         except Exception:
             log.exception("Fehler bei %s %s", method, path)
-            self._json(500, {"error": "Interner Fehler"})
+            self._json(500, {"error": i18n.t(i18n.norm(lang), "Interner Fehler")})
 
     def _auth(self):
         h = self.headers.get("Authorization", "")
         if not h.startswith("Bearer "):
             return None
         with db.read() as conn:
-            r = conn.execute("SELECT id, display_name, unit FROM resident WHERE auth_token = ?", (h[7:],)).fetchone()
+            r = conn.execute("SELECT id, display_name, unit, lang FROM resident WHERE auth_token = ?", (h[7:],)).fetchone()
         return dict(r) if r else None
 
     def _body(self):

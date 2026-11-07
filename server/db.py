@@ -85,6 +85,8 @@ def _migrate(conn, schema):
     if "patio_route" not in cols("car"):
         conn.execute("ALTER TABLE car ADD COLUMN patio_route TEXT NOT NULL DEFAULT 'ask' "
                      "CHECK (patio_route IN ('ask', 'never'))")
+    if "lang" not in cols("resident"):
+        conn.execute("ALTER TABLE resident ADD COLUMN lang TEXT NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en'))")
     if "patio_choice" not in cols("conflict"):
         # Konflikte sind abgeleitete Daten: Tabelle neu anlegen (neuer Status 'patio').
         conn.execute("DROP TABLE conflict")

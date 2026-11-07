@@ -15,7 +15,7 @@ standalone = '--standalone' in sys.argv[3:]
 
 css = (web / 'styles.css').read_text()
 html = (web / 'index.html').read_text()
-js = (here / 'app.js').read_text()
+js = (web / 'i18n.js').read_text() + '\n' + (here / 'app.js').read_text()   # Übersetzungen zuerst
 
 body = html[html.index('<body>') + len('<body>'):html.index('<script')]
 body = body.replace('<main>', '<main>\n    <section id="banner" class="banner" role="status" hidden></section>', 1)
