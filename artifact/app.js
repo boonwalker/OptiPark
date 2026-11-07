@@ -1210,14 +1210,14 @@ function seedDemo() {
     R.residents[id] = { display_name: name, unit, cars: [{ id: `car-${id}`, nickname: car, plate: '', color, active: true, recurring: routine ? [{ id: `r-${id}`, ...routine, skips: [] }] : [], planned: planned ? [planned] : [] }] };
   };
   mk('demo-anna', 'Anna', t('EG links'), 'Polo', '#ff6b5b', { weekdays: 127, time: '09:00', label: t('Arbeit') });
-  mk('demo-ben', 'Ben', t('EG rechts'), 'Golf', '#3ecf8e', { weekdays: 127, time: '07:00', label: t('Arbeit') });
+  mk('demo-katia', 'Katia', t('EG rechts'), 'Chirey', '#e9ecf2', { weekdays: 127, time: '07:00', label: t('Arbeit') });
   mk('demo-clara', 'Clara', t('1. OG'), 'Mini', '#ffb547', { weekdays: 127, time: '08:15', label: t('Schule') });
-  mk('demo-deniz', 'Deniz', t('2. OG'), 'Tesla', '#e9ecf2', null, { id: 'p1', at: iso(now + 30 * 3600e3), note: t('Ausflug') });
+  mk('demo-deniz', 'Deniz', t('2. OG'), 'Tesla', '#7c8594', null, { id: 'p1', at: iso(now + 30 * 3600e3), note: t('Ausflug') });
   mk('demo-emil', 'Emil', t('2. OG'), 'Kombi', '#b57cff', { weekdays: 127, time: '06:30', label: t('Frühschicht') });
   const park = (spot, who) => { R.spots[spot] = { car_id: `car-${who}`, resident_id: who, parked_at: ago }; };
-  // Ben (du) steht auf R2 hinter Deniz (R1), der erst übermorgen fährt → Konflikt mit Patio-Notweg als Beispiel
-  park('L1', 'demo-anna'); park('L4', 'demo-clara'); park('R2', 'demo-ben'); park('R1', 'demo-deniz'); park('R3', 'demo-emil');
-  uid = 'demo-ben';   // in der Demo bist du Ben
+  // Katia (du) steht auf R2 hinter Deniz (R1), der erst übermorgen fährt → Konflikt mit Patio-Notweg als Beispiel
+  park('L1', 'demo-anna'); park('L4', 'demo-clara'); park('R2', 'demo-katia'); park('R1', 'demo-deniz'); park('R3', 'demo-emil');
+  uid = 'demo-katia';   // in der Demo bist du Katia (weißer Chirey)
 }
 
 async function start() {
