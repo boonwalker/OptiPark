@@ -67,9 +67,12 @@ SPOTS = [
 #
 # Tür 1 · links: Links neben L1–L3 liegt eine Fahrspur. L1–L3 und L4 fahren
 #   direkt hinaus. L5 kommt über L3 (gerade) oder über L4 (schräg in die Spur).
-#   L6 nur über L4. L7 über L5 (gerade) oder schräg über L6 – von dort weiter
-#   wie L5 bzw. L6, also auch L7 → L5 → L4, wenn L6 belegt ist. Patio dahinter.
+#   L6 über L4 oder seitlich auf L7 und dann über L5. L7 über L5 (gerade) oder
+#   schräg über L6 – von dort weiter wie L5 bzw. L6, also auch L7 → L5 → L4,
+#   wenn L6 belegt ist. Patio dahinter.
 # Tür 2 · rechts: R1 fährt direkt hinaus und steht mittig vor beiden Spalten.
+#   R2 und R3 über R1. R4 über R2 oder seitlich auf R5 und dann über R3;
+#   R5 über R3 oder seitlich auf R4 und dann über R2.
 # Patio: Die Trennwand endet vor dem Patio. Patio-Autos können seitlich über
 #   freie Nachbar-Patioplätze fahren – auch über die Mitte (P2 ↔ P3) – und
 #   so auf der anderen Seite hinaus.
@@ -78,11 +81,12 @@ OUT = None
 EXITS = {
     "L1": [OUT], "L2": [OUT], "L3": [OUT], "L4": [OUT],
     "L5": ["L3", "L4"],
-    "L6": ["L4"],
+    "L6": ["L4", "L7"],          # über L4 oder seitlich auf L7 und dann über L5
     "L7": ["L5", "L6"],
     "R1": [OUT],
     "R2": ["R1"], "R3": ["R1"],
-    "R4": ["R2"], "R5": ["R3"],
+    "R4": ["R2", "R5"],          # über R2 oder seitlich auf R5 und dann über R3
+    "R5": ["R3", "R4"],          # über R3 oder seitlich auf R4 und dann über R2
     "P1": ["L6", "P2"],
     "P2": ["L7", "P1", "P3"],
     "P3": ["R4", "P2", "P4"],

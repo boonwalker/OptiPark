@@ -372,9 +372,12 @@ SPOTS = [
 #
 # Tür 1 · links: Links neben L1–L3 liegt eine Fahrspur. L1–L3 und L4 fahren
 #   direkt hinaus. L5 kommt über L3 (gerade) oder über L4 (schräg in die Spur).
-#   L6 nur über L4. L7 über L5 (gerade) oder schräg über L6 – von dort weiter
-#   wie L5 bzw. L6, also auch L7 → L5 → L4, wenn L6 belegt ist. Patio dahinter.
+#   L6 über L4 oder seitlich auf L7 und dann über L5. L7 über L5 (gerade) oder
+#   schräg über L6 – von dort weiter wie L5 bzw. L6, also auch L7 → L5 → L4,
+#   wenn L6 belegt ist. Patio dahinter.
 # Tür 2 · rechts: R1 fährt direkt hinaus und steht mittig vor beiden Spalten.
+#   R2 und R3 über R1. R4 über R2 oder seitlich auf R5 und dann über R3;
+#   R5 über R3 oder seitlich auf R4 und dann über R2.
 # Patio: Die Trennwand endet vor dem Patio. Patio-Autos können seitlich über
 #   freie Nachbar-Patioplätze fahren – auch über die Mitte (P2 ↔ P3) – und
 #   so auf der anderen Seite hinaus.
@@ -383,11 +386,12 @@ OUT = None
 EXITS = {
     "L1": [OUT], "L2": [OUT], "L3": [OUT], "L4": [OUT],
     "L5": ["L3", "L4"],
-    "L6": ["L4"],
+    "L6": ["L4", "L7"],          # über L4 oder seitlich auf L7 und dann über L5
     "L7": ["L5", "L6"],
     "R1": [OUT],
     "R2": ["R1"], "R3": ["R1"],
-    "R4": ["R2"], "R5": ["R3"],
+    "R4": ["R2", "R5"],          # über R2 oder seitlich auf R5 und dann über R3
+    "R5": ["R3", "R4"],          # über R3 oder seitlich auf R4 und dann über R2
     "P1": ["L6", "P2"],
     "P2": ["L7", "P1", "P3"],
     "P3": ["R4", "P2", "P4"],
@@ -403,7 +407,7 @@ EXITS = {
 - `can_leave(...)` → `kommt_raus`.
 - `blockers(moves, start, obstacles)` → leere Menge, wenn raus, sonst `frontier`.
 - `patio_spots(conn)` → IDs der Patio-Plätze.
-- `patio_route(moves, start, obstacles, patios)` → **Patio-Notweg** oder `None`. Nur für Autos auf normalen Plätzen, die regulär nicht rauskommen. Phase 1: Breitensuche **rückwärts** (entgegen den Pfeilen des Wegenetzes, also über Plätze, die über den aktuellen Platz rausfahren würden) durch freie Plätze; jeder erreichte Patio-Platz wird gemerkt. Phase 2: von jedem erreichten Patio-Platz (in Reihenfolge des Erreichens) Breitensuche **vorwärts** auf den normalen Wegen durch freie Plätze bis hinaus. Ergebnis `{"reverse": [Plätze bis einschließlich Patio-Platz], "forward": [Plätze danach]}`. Beispiele: L6 mit belegtem L4 → `reverse [P1]`, `forward [P2, L7, L5, L3]`; ist zusätzlich L7 belegt → `forward [P2, P3, R4, R2, R1]`.
+- `patio_route(moves, start, obstacles, patios)` → **Patio-Notweg** oder `None`. Nur für Autos auf normalen Plätzen, die regulär nicht rauskommen. Phase 1: Breitensuche **rückwärts** (entgegen den Pfeilen des Wegenetzes, also über Plätze, die über den aktuellen Platz rausfahren würden) durch freie Plätze; jeder erreichte Patio-Platz wird gemerkt. Phase 2: von jedem erreichten Patio-Platz (in Reihenfolge des Erreichens) Breitensuche **vorwärts** auf den normalen Wegen durch freie Plätze bis hinaus. Ergebnis `{"reverse": [Plätze bis einschließlich Patio-Platz], "forward": [Plätze danach]}`. Beispiele: L6 mit belegtem L4 und L5 → `reverse [P1]`, `forward [P2, P3, R4, R2, R1]`; R2 mit belegtem R1 → `reverse [R4, P3]`, `forward [P2, L7, L5, L3]`.
 - `clearing_set(moves, start, obstacles)` → Liste von **Schichten**: erst `frontier`, dann so tun, als wären die weg, nächste `frontier` … bis ein Weg frei ist. Schichten mit mehreren Plätzen sind Alternativen.
 
 ---
@@ -610,7 +614,7 @@ Legt (falls noch nicht vorhanden) an und gibt Anmelde-Links `http://localhost:80
 
 ---
 
-## 12. Tests (müssen alle grün sein, aktuell 47)
+## 12. Tests (müssen alle grün sein, aktuell 55)
 
 `tests/test_rules.py` (Hilfsmethode `park(L5=7, L3=9, L4=None)` = Platz → Stunden bis zur Ausfahrt, `None` = unbekannt; Ergebnis als Menge `"Blocker→Blockierter"`):
 
@@ -621,38 +625,46 @@ Legt (falls noch nicht vorhanden) an und gibt Anmelde-Links `http://localhost:80
 | L5=7, L4=9 | keiner (über L3) |
 | L5=7, L3=9, L4=unbekannt | L3→L5, L4→L5 |
 | L5=7, L3=9, L4=6 | keiner |
-| L6=7, L4=9 | L4→L6 |
+| L6=7, L4=9 | keiner (seitlich auf L7, dann über L5) |
+| L6=7, L4=9, L7=9 | L4→L6, L7→L6 |
+| L6=7, L4=9, L5=9 | L4→L6, L5→L6 |
 | L7=7, L5=9, L3=9, L4=9 | L5→L7, L4→L7 |
 | L7=7, L5=9 | keiner (schräg über L6) |
 | L7=7, L6=9, L3=9 | keiner (L5 → L4) |
 | L7=7, L5=9, L6=9 | L5→L7, L6→L7 |
 | L7=7, L3=9, L4=9 | L3→L7, L4→L7 |
 | R2=7, R5=8, R1=9 | R1→R2, R1→R5 |
-| R4=7, R2=9, R1=9 | R2→R4 |
+| R2=7, R1=9 | R1→R2 |
+| R4=7, R2=9 | keiner (seitlich auf R5, dann über R3) |
+| R5=7, R3=9 | keiner (seitlich auf R4, dann über R2) |
+| R4=7, R2=9, R5=9 | R2→R4, R5→R4 |
+| R4=7, R2=9, R1=9 | R2→R4, R1→R4 |
 | P2=7, L7=9 | keiner (über die Mitte nach rechts) |
 | P2=7, L7=9, P1=9, P3=9 | L7→P2, P1→P2, P3→P2 |
 | P1=7, L6=9 | keiner (P2 → L7 → …) |
 | P4=7, R5=9, P3=9 | R5→P4, P3→P4 |
-| L6=7, L4=unbekannt | L4→L6 |
-| L6=40, L4=50 | keiner (außerhalb 36 h) |
-| L4=9, L6=7 | L4→L6 (Beispiel aus der Aufgabe) |
+| R2=7, R1=unbekannt | R1→R2 |
+| R2=40, R1=50 | keiner (außerhalb 36 h) |
+| R1=9, R2=7 | R1→R2 (Beispiel aus der Aufgabe) |
 
 Notweg (`rules.patio_route`, alle anderen geparkten Autos als Hindernis):
 
 | Fall | Erwartung |
 |---|---|
-| L6, L4 belegt | rückwärts `[P1]`, vorwärts `[P2, L7, L5, L3]` |
+| L6, L4, L5 belegt | rückwärts `[P1]`, vorwärts `[P2, P3, R4, R2, R1]` |
+| L6, L4 belegt | `None` (normal über L7 → L5 frei) |
+| R2, R1 belegt | rückwärts `[R4, P3]`, vorwärts `[P2, L7, L5, L3]` |
 | L6, L4 und L7 belegt | rückwärts `[P1]`, vorwärts `[P2, P3, R4, R2, R1]` |
 | L5, L3 belegt | `None` (normal über L4 frei) |
 | L6, L4, P1, L7, P2 belegt | `None` |
 | P1, L6 und P2 belegt | `None` (Patio-Autos haben keinen Notweg) |
-| R4, R2 belegt | rückwärts `[P3]`, vorwärts endet auf `L3` |
+| R4, R2, R5 belegt | rückwärts `[P3]`, vorwärts endet auf `L3` |
 
 `tests/test_patio.py` (eigene Nachbarn je Name):
-- Ben L6 (7 h), Clara L4 (9 h) → Konflikt mit `patio_route.reverse = [P1]`; Bens Nachricht enthält „rückwärts auf P1“ und „Kommt das für dich in Frage?“, Claras „wird gefragt“.
+- Ben R2 (7 h), Clara R1 (9 h) → Konflikt mit `patio_route.reverse = [R4, P3]`; Bens Nachricht enthält „rückwärts über R4 auf P3“ und „Kommt das für dich in Frage?“, Claras „wird gefragt“.
 - Bens Auto `never` → `patio_route` ist `NULL`.
-- Zusätzlich P1 und L7 belegt, die **vor** Ben wegfahren → trotzdem kein Notweg (vorsichtig).
-- Zusage (`patio_choice yes`, Status `patio`) → `patio_messages` an Clara „Ben weicht übers Patio aus“; Neuberechnung ändert nichts; dann parken Deniz auf P1 und Emil auf L7 (unbekannte Ausfahrt) → Status `open`, `patio_route` und `patio_choice` `NULL`, Nachrichten „Patio-Notweg ist versperrt“ an genau Ben und Clara.
+- Zusätzlich R4 belegt, das **vor** Ben wegfährt → trotzdem kein Notweg (vorsichtig).
+- Zusage (`patio_choice yes`, Status `patio`) → `patio_messages` an Clara „Ben weicht übers Patio aus“; Neuberechnung ändert nichts; dann parkt Deniz auf R4 (unbekannte Ausfahrt) → Status `open`, `patio_route` und `patio_choice` `NULL`, Nachrichten „Patio-Notweg ist versperrt“ an genau Ben und Clara.
 - Status `patio` und Bens Ausfahrt in 30 Min. → keine „Gleich:“-Erinnerung an Clara.
 - `fmt_route({"reverse": ["L7","P2"], "forward": ["P3","R4","R2","R1"]})` = „rückwärts über L7 auf P2, dann über P3 → R4 → R2 → R1 hinaus“.
 
@@ -666,25 +678,25 @@ Diese Tests nutzen ein temporäres `PARK_DATA_DIR` und rollen jede Transaktion z
 `tests/test_api.py` (**neu, ersetzt den Browser-Test**): startet den echten Server in einem Thread auf einem freien Port mit eigenem temporären Datenordner. Dafür stellt `server/app.py` neben `main()` eine Funktion `make_server(host, port)` bereit, die DB und Push initialisiert und den `ThreadingHTTPServer` zurückgibt, ohne `serve_forever` aufzurufen. Der Test spricht nur per `urllib` mit der API:
 1. `GET /api/state` ohne Anmeldung: 16 Stellplätze, 24 Wege in `exits`, `me` ist `null`.
 2. Statische Dateien: `/` enthält „Parkplatz“; `/sw.js` hat einen Content-Type, der mit `application/javascript` beginnt, und `Service-Worker-Allowed: /`; `/manifest.webmanifest` hat `application/manifest+json`.
-3. Anna und Ben registrieren, je ein Auto. Ben parkt auf L6 (Ausfahrt in 10 h), Anna auf L4 (in 12 h). Anna will zusätzlich L6 → 409.
-4. Ohne Anmeldung zeigt `/api/state` für L4 keinen `resident_name`.
-5. Ben sieht einen Konflikt mit Rolle `blocked`, `blocker_spot` L4, `blocked_spot` L6.
-6. `/swap` sofort → 409. Ben `choice: swap` → `open`, Anna `choice: swap` → `swap_agreed`, dann `/swap` → danach steht Bens Auto auf L4, Annas auf L6, keine Konflikte mehr.
-7. Anna (L6, hinter Ben auf L4) startet `/leave-request` → Bens Zustand enthält eine Anfrage mit Rolle `blocker`. Annas sofortiges `/ping` → 429 (Nachklingeln erst nach 3 Min.). Ben antwortet `coming` → Annas Anfrage zeigt `response: coming`.
+3. Anna und Ben registrieren, je ein Auto. Ben parkt auf R2 (Ausfahrt in 10 h), Anna auf R1 (in 12 h). Anna will zusätzlich R2 → 409.
+4. Ohne Anmeldung zeigt `/api/state` für R1 keinen `resident_name`.
+5. Ben sieht einen Konflikt mit Rolle `blocked`, `blocker_spot` R1, `blocked_spot` R2.
+6. `/swap` sofort → 409. Ben `choice: swap` → `open`, Anna `choice: swap` → `swap_agreed`, dann `/swap` → danach steht Bens Auto auf R1, Annas auf R2, keine Konflikte mehr.
+7. Anna (R2, hinter Ben auf R1) startet `/leave-request` → Bens Zustand enthält eine Anfrage mit Rolle `blocker`. Annas sofortiges `/ping` → 429 (Nachklingeln erst nach 3 Min.). Ben antwortet `coming` → Annas Anfrage zeigt `response: coming`.
 8. Ben fährt weg (`/api/leave`) → Annas `leave_requests` ist leer; in der Datenbank hat die Anfrage den Status `cleared`.
 9. `/leave-request` für Anna jetzt → 409 („niemand steht im Weg“).
 
-Ergänzend im API-Test: Nach Schritt 6 parkt Anna neu so, dass Ben auf L6 hinter Anna auf L4 steht; Bens Konflikt hat einen `patio_text`, Anna darf nicht `patio_yes` wählen (409), Ben schon (→ `patio`), danach enthält `patio_reservations` Bens Weg. (Die übrigen Schritte entsprechend anpassen.)
+Ergänzend im API-Test: Nach Schritt 6 parkt Anna neu so, dass Ben auf R2 hinter Anna auf R1 steht; Bens Konflikt hat einen `patio_text`, Anna darf nicht `patio_yes` wählen (409), Ben schon (→ `patio`), danach enthält `patio_reservations` Bens Weg. (Die übrigen Schritte entsprechend anpassen.)
 
 `tests/test_i18n.py` (Sprachen):
 - `t("en", "{name} steht vor dir", name="Ben")` = „Ben is parked in front of you“; ohne Übersetzung bleibt der deutsche Text; unbekannte Sprache → `de`.
 - `fmt_when` auf Englisch: „tomorrow 13:00“, „Fri 13 Nov 13:00“ (Deutsch „Fr 13.11. 13:00“); `fmt_route(..., "en")` = „reverse onto P1, then out via P2 → L7“.
 - Jede englische Vorlage hat genau dieselben `{platzhalter}` wie die deutsche.
-- Ben (en) L6 7 h, Clara (de) L4 9 h → Ben bekommt „Clara is parked in front of you“ mit „Swap spots this evening?“, Clara „Du blockierst Ben“ mit „Heute Abend tauschen?“.
+- Ben (en) R2 7 h, Clara (de) R1 9 h → Ben bekommt „Clara is parked in front of you“ mit „Swap spots this evening?“, Clara „Du blockierst Ben“ mit „Heute Abend tauschen?“.
 - Patio-Rückfrage an Ben (en) enthält „Fallback: reverse onto P1“ und „Does that work for you?“.
 - Rausfahr-Anfrage von Ben (de), Clara (en) im Weg → Titel „Ben wants to leave now“; sofortiges Nachklingeln → `RequestError`, übersetzt „Please wait … more min.“.
 
-Am Ende: `python -m unittest discover tests -v` → **alle grün** (47 aus den Tabellen oben + der API-Test).
+Am Ende: `python -m unittest discover tests -v` → **alle grün** (55 aus den Tabellen oben + der API-Test).
 
 ### 12a. Sprachen
 

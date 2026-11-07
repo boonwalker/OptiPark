@@ -41,10 +41,11 @@ const SPOTS = [
 const EXITS = {
   L1: [null], L2: [null], L3: [null], L4: [null],   // Fahrspur links neben L1–L3
   L5: ['L3', 'L4'],
-  L6: ['L4'],
+  L6: ['L4', 'L7'],                                 // über L4 oder seitlich auf L7, dann über L5
   L7: ['L5', 'L6'],                                 // gerade über L5 oder schräg über L6
   R1: [null],                                       // steht mittig vor beiden Spalten
-  R2: ['R1'], R3: ['R1'], R4: ['R2'], R5: ['R3'],
+  R2: ['R1'], R3: ['R1'],
+  R4: ['R2', 'R5'], R5: ['R3', 'R4'],               // seitlich auf den Nachbarplatz, dann gerade hinaus
   P1: ['L6', 'P2'],                                 // Trennwand endet vor dem Patio
   P2: ['L7', 'P1', 'P3'],
   P3: ['R4', 'P2', 'P4'],
@@ -1203,10 +1204,11 @@ function seedDemo() {
   mk('demo-anna', 'Anna', t('EG links'), 'Polo', '#ff6b5b', { weekdays: 127, time: '09:00', label: t('Arbeit') });
   mk('demo-ben', 'Ben', t('EG rechts'), 'Golf', '#3ecf8e', { weekdays: 127, time: '07:00', label: t('Arbeit') });
   mk('demo-clara', 'Clara', t('1. OG'), 'Mini', '#ffb547', { weekdays: 127, time: '08:15', label: t('Schule') });
-  mk('demo-deniz', 'Deniz', t('2. OG'), 'Tesla', '#e9ecf2', null, { id: 'p1', at: iso(now + 20 * 3600e3), note: t('Ausflug') });
+  mk('demo-deniz', 'Deniz', t('2. OG'), 'Tesla', '#e9ecf2', null, { id: 'p1', at: iso(now + 30 * 3600e3), note: t('Ausflug') });
   mk('demo-emil', 'Emil', t('2. OG'), 'Kombi', '#b57cff', { weekdays: 127, time: '06:30', label: t('Frühschicht') });
   const park = (spot, who) => { R.spots[spot] = { car_id: `car-${who}`, resident_id: who, parked_at: ago }; };
-  park('L1', 'demo-anna'); park('L4', 'demo-clara'); park('L6', 'demo-ben'); park('R1', 'demo-deniz'); park('R3', 'demo-emil');
+  // Ben (du) steht auf R2 hinter Deniz (R1), der erst übermorgen fährt → Konflikt mit Patio-Notweg als Beispiel
+  park('L1', 'demo-anna'); park('L4', 'demo-clara'); park('R2', 'demo-ben'); park('R1', 'demo-deniz'); park('R3', 'demo-emil');
   uid = 'demo-ben';   // in der Demo bist du Ben
 }
 

@@ -61,8 +61,8 @@ class NachrichtenJeSprache(unittest.TestCase):
                               (car, iso(self.now + timedelta(hours=hours))))
 
     def test_konflikt_englisch_und_deutsch_gemischt(self):
-        self.park("L6", "Ben", 7, lang="en")
-        self.park("L4", "Clara", 9, lang="de")
+        self.park("R2", "Ben", 7, lang="en")
+        self.park("R1", "Clara", 9, lang="de")
         notes = conflicts.recompute(self.conn, self.now)
         to_ben = next(n for n in notes if n["resident_id"] == self.rid["Ben"])
         to_clara = next(n for n in notes if n["resident_id"] == self.rid["Clara"])
@@ -72,19 +72,19 @@ class NachrichtenJeSprache(unittest.TestCase):
         self.assertIn("Heute Abend tauschen?", to_clara["body"])
 
     def test_patio_rueckfrage_auf_englisch(self):
-        self.park("L6", "Ben", 7, lang="en", patio="ask")
-        self.park("L4", "Clara", 9, lang="en")
+        self.park("R2", "Ben", 7, lang="en", patio="ask")
+        self.park("R1", "Clara", 9, lang="en")
         notes = conflicts.recompute(self.conn, self.now)
         to_ben = next(n for n in notes if n["resident_id"] == self.rid["Ben"])
-        self.assertIn("Fallback: reverse onto P1", to_ben["body"])
+        self.assertIn("Fallback: reverse via R4 onto P3", to_ben["body"])
         self.assertIn("Does that work for you?", to_ben["body"])
 
     def test_rausfahr_anfrage_auf_englisch(self):
-        self.park("L6", "Ben", 7, lang="de")
-        self.park("L4", "Clara", 9, lang="en")
-        rid, notes = leave_requests.create(self.conn, self.pid["L6"], self.now)
+        self.park("R2", "Ben", 7, lang="de")
+        self.park("R1", "Clara", 9, lang="en")
+        rid, notes = leave_requests.create(self.conn, self.pid["R2"], self.now)
         self.assertEqual(notes[0]["title"], "Ben wants to leave now")
-        self.assertIn("Your Auto Clara on L4 is in the way of Ben (L6)", notes[0]["body"])
+        self.assertIn("Your Auto Clara on R1 is in the way of Ben (R2)", notes[0]["body"])
         with self.assertRaises(leave_requests.RequestError) as e:
             leave_requests.ping(self.conn, rid, self.now)
         self.assertRegex(i18n.t("en", e.exception.message, **e.exception.values), r"^Please wait \d+ more min\.$")

@@ -88,26 +88,26 @@ class LeaveRequests(unittest.TestCase):
             lr.create(self.conn, self.pid["L1"], self.now)
 
     def test_nur_eine_offene_anfrage(self):
-        self.park(L6="Ben", L4="Anna")
-        lr.create(self.conn, self.pid["L6"], self.now)
+        self.park(R2="Ben", R1="Anna")
+        lr.create(self.conn, self.pid["R2"], self.now)
         with self.assertRaises(lr.RequestError):
-            lr.create(self.conn, self.pid["L6"], self.now)
+            lr.create(self.conn, self.pid["R2"], self.now)
 
     def test_verfaellt_nach_einer_stunde(self):
-        self.park(L6="Ben", L4="Anna")
-        rid, _ = lr.create(self.conn, self.pid["L6"], self.now)
+        self.park(R2="Ben", R1="Anna")
+        rid, _ = lr.create(self.conn, self.pid["R2"], self.now)
         lr.reconcile(self.conn, self.now + timedelta(minutes=61))
         status = self.conn.execute("SELECT status FROM leave_request WHERE id = ?", (rid,)).fetchone()[0]
         self.assertEqual(status, "expired")
 
     def test_eigenes_auto_wird_nicht_benachrichtigt(self):
-        self.park(L6="Ben", L4="Ben")
-        _, notes = lr.create(self.conn, self.pid["L6"], self.now)
+        self.park(R2="Ben", R1="Ben")
+        _, notes = lr.create(self.conn, self.pid["R2"], self.now)
         self.assertEqual(notes, [])
 
     def test_ansicht_fuer_blockierer(self):
-        self.park(L6="Ben", L4="Anna")
-        lr.create(self.conn, self.pid["L6"], self.now)
+        self.park(R2="Ben", R1="Anna")
+        lr.create(self.conn, self.pid["R2"], self.now)
         view = lr.for_resident(self.conn, self.rid["Anna"], self.now)
         self.assertEqual(view[0]["role"], "blocker")
         self.assertEqual(view[0]["requester_name"], "Ben")

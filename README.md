@@ -67,11 +67,12 @@ Die Autos parken rückwärts ein und fahren vorwärts hinaus, die Zufahrt liegt 
 |---|---|
 | L1, L2, L3, L4 | direkt (Fahrspur links neben L1–L3) |
 | L5 | über L3 **oder** L4 |
-| L6 | über L4 |
+| L6 | über L4 **oder** seitlich auf L7 und dann über L5 |
 | L7 | über L5 **oder** schräg über L6 (weiter wie L5 / L6) |
 | R1 | direkt |
 | R2, R3 | über R1 (steht mittig vor beiden Spalten) |
-| R4 / R5 | über R2 / R3 |
+| R4 | über R2 **oder** seitlich auf R5 und dann über R3 |
+| R5 | über R3 **oder** seitlich auf R4 und dann über R2 |
 | P1 | über L6 oder seitlich über P2 |
 | P2 | über L7 oder seitlich über P1 / P3 (Wechsel zur rechten Seite) |
 | P3 | über R4 oder seitlich über P2 / P4 |

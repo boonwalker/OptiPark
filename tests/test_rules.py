@@ -68,9 +68,17 @@ class Rules(unittest.TestCase):
         self.park(L5=7, L3=9, L4=6)
         self.assertEqual(self.conflicts(), set())
 
-    def test_l6_nur_ueber_l4(self):
+    def test_l6_ueber_l7_und_l5_wenn_l4_belegt(self):
         self.park(L6=7, L4=9)
-        self.assertEqual(self.conflicts(), {"L4→L6"})
+        self.assertEqual(self.conflicts(), set())  # L6 → L7 → L5 → L3 → raus
+
+    def test_l6_steht_fest_wenn_l4_und_l7_belegt(self):
+        self.park(L6=7, L4=9, L7=9)
+        self.assertEqual(self.conflicts(), {"L4→L6", "L7→L6"})
+
+    def test_l6_ueber_freies_l7_stoesst_an_l5(self):
+        self.park(L6=7, L4=9, L5=9)
+        self.assertEqual(self.conflicts(), {"L4→L6", "L5→L6"})
 
     def test_l7_meldet_nur_das_erste_hindernis(self):
         # L7: gerade über L5 (belegt) oder schräg über L6 (frei) → dort stößt es an L4
@@ -98,9 +106,25 @@ class Rules(unittest.TestCase):
         self.park(R2=7, R5=8, R1=9)
         self.assertEqual(self.conflicts(), {"R1→R2", "R1→R5"})
 
-    def test_r4_stoesst_zuerst_an_r2(self):
+    def test_r2_nur_ueber_r1(self):
+        self.park(R2=7, R1=9)
+        self.assertEqual(self.conflicts(), {"R1→R2"})
+
+    def test_r4_ueber_r5_und_r3_wenn_r2_belegt(self):
+        self.park(R4=7, R2=9)
+        self.assertEqual(self.conflicts(), set())  # R4 → R5 → R3 → R1 → raus
+
+    def test_r5_ueber_r4_und_r2_wenn_r3_belegt(self):
+        self.park(R5=7, R3=9)
+        self.assertEqual(self.conflicts(), set())  # R5 → R4 → R2 → R1 → raus
+
+    def test_r4_steht_fest_wenn_r2_und_r5_belegt(self):
+        self.park(R4=7, R2=9, R5=9)
+        self.assertEqual(self.conflicts(), {"R2→R4", "R5→R4"})
+
+    def test_r4_stoesst_auf_beiden_wegen_an_r1(self):
         self.park(R4=7, R2=9, R1=9)
-        self.assertEqual(self.conflicts(), {"R2→R4"})
+        self.assertEqual(self.conflicts(), {"R2→R4", "R1→R4"})
 
     # ── Patio ──────────────────────────────────────────────────
     def test_patio_weicht_ueber_die_mitte_aus(self):
@@ -129,9 +153,19 @@ class Rules(unittest.TestCase):
         return None if r is None else ([codes[s] for s in r["reverse"]], [codes[s] for s in r["forward"]])
 
     def test_notweg_l6_rueckwaerts_auf_p1(self):
-        self.park(L6=7, L4=9)
+        self.park(L6=7, L4=9, L5=9)
         reverse, forward = self.route("L6")
         self.assertEqual(reverse, ["P1"])
+        self.assertEqual(forward, ["P2", "P3", "R4", "R2", "R1"])
+
+    def test_kein_notweg_noetig_wenn_l6_ueber_l7_raus_kann(self):
+        self.park(L6=7, L4=9)
+        self.assertIsNone(self.route("L6"))
+
+    def test_notweg_r2_rueckwaerts_ueber_r4_auf_p3(self):
+        self.park(R2=7, R1=9)
+        reverse, forward = self.route("R2")
+        self.assertEqual(reverse, ["R4", "P3"])
         self.assertEqual(forward, ["P2", "L7", "L5", "L3"])
 
     def test_notweg_ueber_die_andere_seite(self):
@@ -153,24 +187,24 @@ class Rules(unittest.TestCase):
         self.assertIsNone(self.route("P1"))
 
     def test_notweg_rechts_von_r4(self):
-        self.park(R4=7, R2=9)
+        self.park(R4=7, R2=9, R5=9)
         reverse, forward = self.route("R4")
         self.assertEqual(reverse, ["P3"])
         self.assertEqual(forward[-1:], ["L3"])  # P3 → P2 → L7 → L5 → L3 (kürzester freier Weg)
 
     # ── Allgemein ──────────────────────────────────────────────
     def test_unbekannte_ausfahrt_zaehlt_als_blockierer(self):
-        self.park(L6=7, L4=None)
-        self.assertEqual(self.conflicts(), {"L4→L6"})
+        self.park(R2=7, R1=None)
+        self.assertEqual(self.conflicts(), {"R1→R2"})
 
     def test_ausserhalb_des_horizonts_keine_warnung(self):
-        self.park(L6=40, L4=50)
+        self.park(R2=40, R1=50)
         self.assertEqual(self.conflicts(), set())
 
     def test_beispiel_aus_der_aufgabe(self):
         # A blockiert B; B muss um 7, A erst um 9
-        self.park(L4=9, L6=7)
-        self.assertEqual(self.conflicts(), {"L4→L6"})
+        self.park(R1=9, R2=7)
+        self.assertEqual(self.conflicts(), {"R1→R2"})
 
 
 if __name__ == "__main__":

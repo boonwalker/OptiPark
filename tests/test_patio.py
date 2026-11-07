@@ -40,38 +40,39 @@ class PatioRoute(unittest.TestCase):
                               (car, iso(self.now + timedelta(hours=hours))))
 
     def conflict(self):
-        return self.conn.execute("SELECT * FROM conflict WHERE status IN ('open','swap_agreed','acknowledged','patio')").fetchone()
+        """Bens Konflikt (Ben steht auf R2, Clara davor auf R1)."""
+        return self.conn.execute("SELECT * FROM conflict WHERE status IN ('open','swap_agreed','acknowledged','patio') "
+                                 "AND blocked_parking_id = ?", (self.pid["R2"],)).fetchone()
 
     def test_notweg_wird_am_konflikt_gespeichert_und_b_gefragt(self):
-        self.park("L6", "Ben", 7)
-        self.park("L4", "Clara", 9)
+        self.park("R2", "Ben", 7)
+        self.park("R1", "Clara", 9)
         notes = conflicts.recompute(self.conn, self.now)
         c = self.conflict()
-        self.assertEqual(json.loads(c["patio_route"])["reverse"], ["P1"])
+        self.assertEqual(json.loads(c["patio_route"])["reverse"], ["R4", "P3"])
         to_ben = next(n for n in notes if n["resident_id"] == self.rid["Ben"])
         self.assertIn("Kommt das für dich in Frage?", to_ben["body"])
-        self.assertIn("rückwärts auf P1", to_ben["body"])
+        self.assertIn("rückwärts über R4 auf P3", to_ben["body"])
         to_clara = next(n for n in notes if n["resident_id"] == self.rid["Clara"])
         self.assertIn("wird gefragt", to_clara["body"])   # A erfährt es sofort, mit Hinweis
 
     def test_auto_ohne_notweg_wird_nicht_gefragt(self):
-        self.park("L6", "Ben", 7, patio="never")
-        self.park("L4", "Clara", 9)
+        self.park("R2", "Ben", 7, patio="never")
+        self.park("R1", "Clara", 9)
         conflicts.recompute(self.conn, self.now)
         self.assertIsNone(self.conflict()["patio_route"])
 
     def test_vorsichtig_auch_fruehere_ausfahrer_sperren_den_notweg(self):
-        # P1 und L7 fahren zwar vor Ben weg, könnten aber zurückkommen → kein Notweg
-        self.park("L6", "Ben", 7)
-        self.park("L4", "Clara", 9)
-        self.park("P1", "Deniz", 5)
-        self.park("L7", "Emil", 5)
+        # R4 fährt zwar vor Ben weg, könnte aber zurückkommen → kein Notweg
+        self.park("R2", "Ben", 7)
+        self.park("R1", "Clara", 9)
+        self.park("R4", "Deniz", 5)
         conflicts.recompute(self.conn, self.now)
         self.assertIsNone(self.conflict()["patio_route"])
 
     def test_zusage_und_wegfall_wenn_jemand_den_weg_zuparkt(self):
-        self.park("L6", "Ben", 7)
-        self.park("L4", "Clara", 9)
+        self.park("R2", "Ben", 7)
+        self.park("R1", "Clara", 9)
         conflicts.recompute(self.conn, self.now)
         c = self.conflict()
         self.conn.execute("UPDATE conflict SET patio_choice = 'yes', status = 'patio' WHERE id = ?", (c["id"],))
@@ -79,8 +80,7 @@ class PatioRoute(unittest.TestCase):
         self.assertEqual(conflicts.recompute(self.conn, self.now), [])     # bleibt zugesagt
         self.assertEqual(self.conflict()["status"], "patio")
 
-        self.park("P1", "Deniz", None)    # über Nacht parkt jemand aufs Patio …
-        self.park("L7", "Emil", None)     # … und auf den Ausweichweg
+        self.park("R4", "Deniz", None)    # über Nacht parkt jemand auf den Weg zum Patio
         notes = conflicts.recompute(self.conn, self.now)
         self.assertEqual(self.conflict()["status"], "open")
         self.assertIsNone(self.conflict()["patio_route"])
@@ -89,8 +89,8 @@ class PatioRoute(unittest.TestCase):
         self.assertIsNone(self.conflict()["patio_choice"])   # wird der Weg wieder frei, fragt die App neu
 
     def test_keine_erinnerung_an_a_wenn_b_uebers_patio_faehrt(self):
-        self.park("L6", "Ben", 0.5)
-        self.park("L4", "Clara", 9)
+        self.park("R2", "Ben", 0.5)
+        self.park("R1", "Clara", 9)
         conflicts.recompute(self.conn, self.now - timedelta(hours=2))
         c = self.conflict()
         self.conn.execute("UPDATE conflict SET patio_choice = 'yes', status = 'patio' WHERE id = ?", (c["id"],))
