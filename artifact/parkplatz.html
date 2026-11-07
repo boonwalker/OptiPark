@@ -2381,7 +2381,7 @@ function seedDemo() {
     R.residents[id] = { display_name: name, unit, cars: [{ id: `car-${id}`, nickname: car, plate: '', color, active: true, recurring: routine ? [{ id: `r-${id}`, ...routine, skips: [] }] : [], planned: planned ? [planned] : [] }] };
   };
   mk('demo-anna', 'Anna', t('EG links'), 'Polo', '#ff6b5b', { weekdays: 127, time: '09:00', label: t('Arbeit') });
-  mk('demo-katia', 'Katia', t('EG rechts'), 'Chirey', '#e9ecf2', { weekdays: 127, time: '07:00', label: t('Arbeit') });
+  mk('demo-katia', 'Katia', '5', 'Chirey', '#e9ecf2', { weekdays: 127, time: '07:00', label: t('Arbeit') });
   mk('demo-clara', 'Clara', t('1. OG'), 'Mini', '#ffb547', { weekdays: 127, time: '08:15', label: t('Schule') });
   mk('demo-deniz', 'Deniz', t('2. OG'), 'Tesla', '#7c8594', null, { id: 'p1', at: iso(now + 30 * 3600e3), note: t('Ausflug') });
   mk('demo-emil', 'Emil', t('2. OG'), 'Kombi', '#b57cff', { weekdays: 127, time: '06:30', label: t('Frühschicht') });
