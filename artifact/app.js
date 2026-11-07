@@ -1214,9 +1214,12 @@ function seedDemo() {
   mk('demo-clara', 'Clara', t('1. OG'), 'Mini', '#ffb547', { weekdays: 127, time: '08:15', label: t('Schule') });
   mk('demo-deniz', 'Deniz', t('2. OG'), 'Tesla', '#7c8594', null, { id: 'p1', at: iso(now + 30 * 3600e3), note: t('Ausflug') });
   mk('demo-emil', 'Emil', t('2. OG'), 'Kombi', '#b57cff', { weekdays: 127, time: '06:30', label: t('Frühschicht') });
+  mk('demo-fabian', 'Fabian', t('1. OG'), 'Fiat', '#2ec4d6', { weekdays: 127, time: '07:45', label: t('Arbeit') });
+  mk('demo-greta', 'Greta', t('EG links'), 'Smart', '#ff7ab6', { weekdays: 127, time: '10:00', label: t('Arbeit') });
   const park = (spot, who) => { R.spots[spot] = { car_id: `car-${who}`, resident_id: who, parked_at: ago }; };
   // Katia (du) steht auf R2 hinter Deniz (R1), der erst übermorgen fährt → Konflikt mit Patio-Notweg als Beispiel
-  park('L1', 'demo-anna'); park('L4', 'demo-clara'); park('R2', 'demo-katia'); park('R1', 'demo-deniz'); park('R3', 'demo-emil');
+  // Links wird üblicherweise L1 → L2 → L3 → L5 → L7 aufgefüllt, L4 und L6 erst zuletzt
+  park('L1', 'demo-anna'); park('L2', 'demo-fabian'); park('L3', 'demo-clara'); park('L5', 'demo-greta'); park('R2', 'demo-katia'); park('R1', 'demo-deniz'); park('R3', 'demo-emil');
   uid = 'demo-katia';   // in der Demo bist du Katia (weißer Chirey)
 }
 
