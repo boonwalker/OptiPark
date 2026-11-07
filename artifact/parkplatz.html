@@ -440,18 +440,23 @@ main {
     </svg>
   </template>
 <script>
-// Sprachen der Oberfläche: Deutsch (Grundsprache) und Englisch.
+// Sprachen der Oberfläche: Deutsch (Grundsprache), Englisch und Spanisch.
 // Texte stehen im Code auf Deutsch mit {platzhaltern}: t('{car} steht auf {spot}', { car, spot }).
 // Fehlt eine Übersetzung, erscheint der deutsche Text.
-// Sprache: von Hand gewählt (Profil) oder die des Geräts – Englisch, wenn das Gerät Englisch spricht, sonst Deutsch.
+// Sprache: von Hand gewählt (Profil) oder die des Geräts – Deutsch bei deutschem Gerät, Spanisch bei spanischem,
+// sonst Englisch.
 // Wird auch in die Artefakt-Seite eingebaut (artifact/build.py).
+
+const LANGS = ['de', 'en', 'es'];
+const LANG_NAMES = { de: 'Deutsch', en: 'English', es: 'Español' };
 
 const LANG = (() => {
   try {
     const s = localStorage.getItem('park.lang');
-    if (s === 'de' || s === 'en') return s;
+    if (LANGS.includes(s)) return s;
   } catch { /* privat */ }
-  return /^en\b/i.test(navigator.language || '') ? 'en' : 'de';
+  const dev = (navigator.language || '').toLowerCase();
+  return dev.startsWith('de') ? 'de' : dev.startsWith('es') ? 'es' : 'en';
 })();
 
 function setLang(lang) {
@@ -459,20 +464,28 @@ function setLang(lang) {
 }
 
 function t(de, params) {
-  let s = LANG === 'en' ? (I18N_EN[de] ?? de) : de;
+  const dict = LANG === 'en' ? I18N_EN : LANG === 'es' ? I18N_ES : null;
+  let s = dict ? (dict[de] ?? de) : de;
   if (params) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m));
   return s;
 }
 
-const WD_SHORT = LANG === 'en' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const WD_SHORT = {
+  de: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+  en: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  es: ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'],
+}[LANG];
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-/** Tag als Wort („morgen“) oder kurz mit Datum („Mo 10.11.“ / „Mon 10 Nov“). wd: 0 = Montag. */
+/** Tag als Wort („morgen“) oder kurz mit Datum („Mo 10.11.“ / „Mon 10 Nov“ / „lun 10 nov“). wd: 0 = Montag. */
 function fmtDay(diff, wd, day, month) {
   const word = { 0: 'heute', 1: 'morgen', 2: 'übermorgen' }[diff];
   if (word) return t(word);
   const pad = (n) => String(n).padStart(2, '0');
-  return LANG === 'en' ? `${WD_SHORT[wd]} ${day} ${MONTHS_EN[month - 1]}` : `${WD_SHORT[wd]} ${pad(day)}.${pad(month)}.`;
+  if (LANG === 'en') return `${WD_SHORT[wd]} ${day} ${MONTHS_EN[month - 1]}`;
+  if (LANG === 'es') return `${WD_SHORT[wd]} ${day} ${MONTHS_ES[month - 1]}`;
+  return `${WD_SHORT[wd]} ${pad(day)}.${pad(month)}.`;
 }
 
 /** Feste Texte in der HTML-Seite: data-i18n (Inhalt) und data-i18n-aria (aria-label). */
@@ -817,6 +830,343 @@ const I18N_EN = {
   '{name} kommt sofort': '{name} is coming right away',
   '{name} braucht noch ~15 Min.': '{name} needs about 15 more min.',
   'Weg ist frei 🚗 Du kannst jetzt rausfahren.': 'The way is clear 🚗 You can drive out now.',
+};
+
+const I18N_ES = {
+  // Allgemein & Seite
+  'Parkplatz': 'Aparcamiento',
+  'Profil': 'Perfil',
+  'Dein Auto': 'Tu coche',
+  'Frei – antippen zum Parken': 'Libre – toca para aparcar',
+  'Konflikt': 'Conflicto',
+  'Konflikt anderer': 'Conflicto de otros',
+  'Konflikte anderer hier': 'Conflictos de otros vecinos aquí',
+  '{a_name} ({a_spot}) steht vor {b_name} ({b_spot})': '{a_name} ({a_spot}) está delante de {b_name} ({b_spot})',
+  '{b_name} muss {b_when} raus, {a_name} fährt erst {a_when}.': '{b_name} tiene que salir {b_when}, {a_name} no sale hasta {a_when}.',
+  'Tür 1 · links': 'Puerta 1 · izquierda',
+  'Tür 2 · rechts': 'Puerta 2 · derecha',
+  'Fehler {n}': 'Error {n}',
+  'Server nicht erreichbar: {msg}': 'No se puede conectar con el servidor: {msg}',
+  'Das hat nicht geklappt': 'No ha funcionado',
+  'Gespeichert': 'Guardado',
+  'Speichern': 'Guardar',
+  'Hinzugefügt': 'Añadido',
+  'Gelöscht': 'Borrado',
+  'Entfernt': 'Eliminado',
+  'Löschen': 'Borrar',
+  'Schließen': 'Cerrar',
+  'Weiter': 'Siguiente',
+  'Später': 'Más tarde',
+
+  // Zeit
+  'unbekannt': 'desconocido',
+  'heute': 'hoy',
+  'morgen': 'mañana',
+  'übermorgen': 'pasado mañana',
+  'täglich': 'a diario',
+  'Mo–Fr': 'lun–vie',
+  'Sa–So': 'sáb–dom',
+  'keine Ausfahrt bekannt': 'sin salida prevista',
+  'zu unbekannter Zeit': 'a una hora desconocida',
+
+  // Wege
+  'rückwärts über {via} auf {to}': 'marcha atrás por {via} hasta {to}',
+  'rückwärts auf {to}': 'marcha atrás hasta {to}',
+  ', dann über {via} hinaus': ', luego salir por {via}',
+  ', dann hinaus': ', luego salir',
+  'direkt': 'directamente',
+  'direkt oder über {via}': 'directamente o por {via}',
+  'über {via}': 'por {via}',
+  ' oder ': ' o ',
+  ' und ': ' y ',
+
+  // Stellplätze
+  'Platz {spot}, belegt von {name}': 'Plaza {spot}, ocupada por {name}',
+  'Platz {spot}, belegt': 'Plaza {spot}, ocupada',
+  'Platz {spot}, frei': 'Plaza {spot}, libre',
+  'Patio-Platz': 'Plaza del patio',
+  'Ausfahrt': 'Salida',
+  'Ausfahrt über': 'Salida por',
+  'Ausfahrt über (einer muss frei sein)': 'Salida por (una tiene que estar libre)',
+  'Fährt über diesen Platz raus': 'Sale pasando por esta plaza',
+  'frei': 'libre',
+  'fährt {when}': 'sale {when}',
+
+  // Status
+  'Willkommen!': '¡Bienvenido/a!',
+  'Melde dich an, um Plätze zu belegen und Konflikte zu sehen.': 'Regístrate para ocupar plazas y ver conflictos.',
+  'Trag dich ein, um Plätze zu belegen und Konflikte zu sehen.': 'Regístrate para ocupar plazas y ver conflictos.',
+  'Loslegen': 'Empezar',
+  'Noch kein Auto': 'Todavía sin coche',
+  'Leg dein Auto an, dann kannst du parken.': 'Añade tu coche y podrás aparcar.',
+  'Auto anlegen': 'Añadir coche',
+  '{car} steht auf {spot}': '{car} está en {spot}',
+  'Nächste Ausfahrt: {dep}': 'Próxima salida: {dep}',
+  '{car} ist unterwegs': '{car} está fuera',
+  'Zurück? Tippe auf einen freien Platz.': '¿Has vuelto? Toca una plaza libre.',
+  'Losgefahren': 'Ya he salido',
+  '🚗 Ich will gleich rausfahren': '🚗 Quiero salir ahora',
+  'Gute Fahrt! 👋': '¡Buen viaje! 👋',
+
+  // Rausfahr-Anfrage
+  'Danke! Bescheid gegeben 👍': '¡Gracias! Avisado 👍',
+  'Bescheid gegeben': 'Avisado',
+  'Nochmal geklingelt 🔔': 'Has vuelto a avisar 🔔',
+  'Anfrage beendet': 'Solicitud terminada',
+  '{names} wurde benachrichtigt': 'Se ha avisado a {names}',
+  '{names} wurden benachrichtigt': 'Se ha avisado a {names}',
+  '{names} sieht deine Anfrage': '{names} ve tu solicitud',
+  '{names} sehen deine Anfrage': '{names} ven tu solicitud',
+  'Anfrage gestartet': 'Solicitud enviada',
+  'dein eigenes Auto': 'tu propio coche',
+  '✓ kommt sofort': '✓ viene enseguida',
+  '⏱ in ~{n} Min.': '⏱ en unos {n} min',
+  '… noch keine Antwort': '… todavía sin respuesta',
+  'Bei mehreren Wegen reicht es, wenn einer davon Platz macht.': 'Si hay varias salidas, basta con que una de ellas quede libre.',
+  'Du willst raus – Anfrage läuft': 'Quieres salir – solicitud en curso',
+  '{car} auf {spot} · seit {n} Min.': '{car} en {spot} · desde hace {n} min',
+  ' · mehrere müssen nacheinander weg': ' · varios tienen que moverse uno tras otro',
+  '🔔 Nochmal klingeln': '🔔 Volver a avisar',
+  'Hat sich erledigt': 'Ya no hace falta',
+  'Nachklingeln ab {time} möglich. Ist der Weg frei, bekommst du Bescheid.': 'Puedes volver a avisar a partir de las {time}. Te avisaremos cuando el camino esté libre.',
+  'Nachklingeln ab {time} möglich. Ist der Weg frei, endet die Anfrage von selbst.': 'Puedes volver a avisar a partir de las {time}. La solicitud termina sola cuando el camino esté libre.',
+  'Du hast geantwortet: kommst sofort.': 'Has respondido: vas enseguida.',
+  'Du hast geantwortet: in ~{n} Min.': 'Has respondido: en unos {n} min.',
+  '🚗 {name} will gleich rausfahren': '🚗 {name} quiere salir ahora',
+  'Dein {car} auf {spot} steht im Weg ({their_spot}). Bitte kurz umparken.': 'Tu {car} en {spot} está bloqueando el paso ({their_spot}). Por favor, muévelo un momento.',
+  'Alternativ könnte auch {who} Platz machen.': 'También podría dejar paso {who}.',
+  'Komme sofort': 'Voy enseguida',
+  'Dauert ~15 Min.': 'Unos 15 min',
+
+  // Patio-Notweg
+  'Notlösung übers Patio?': '¿Salida de emergencia por el patio?',
+  'Gerade steht dir jemand im Weg. Ohne einen Nachbarn zu stören, kämst du so raus:': 'Ahora mismo alguien te bloquea. Sin molestar a ningún vecino, podrías salir así:',
+  'Das Patio ist schmal und braucht etwas Rangieren. Nimm den Weg nur, wenn dein Auto passt und du das magst.': 'El patio es estrecho y hay que maniobrar un poco. Usa este camino solo si tu coche cabe y te sientes cómodo/a.',
+  'Ja, ich fahre übers Patio': 'Sí, salgo por el patio',
+  'Nein, Nachbarn fragen': 'No, avisar a los vecinos',
+  'Kommt für mein Auto nie in Frage': 'Nunca es una opción para mi coche',
+  'Gute Fahrt übers Patio! Tippe danach auf „Losgefahren“.': '¡Buen viaje por el patio! Después toca «Ya he salido».',
+  'Gemerkt: kein Patio-Notweg': 'Anotado: sin salida por el patio',
+  'Alles klar – gute Fahrt übers Patio': 'De acuerdo – buen viaje por el patio',
+
+  // Konflikte
+  'Tausch vereinbart 🤝': 'Intercambio acordado 🤝',
+  'Tausch-Wunsch gesendet': 'Propuesta de intercambio enviada',
+  'Tausch-Wunsch gespeichert': 'Propuesta de intercambio guardada',
+  'Plätze getauscht 🎉': 'Plazas intercambiadas 🎉',
+  '{a} steht vor {b}': '{a} está delante de {b}',
+  'Du stehst dir selbst im Weg': 'Te estás bloqueando a ti mismo/a',
+  '{b_car} ({b_spot}) muss {b_when} raus, {a_car} ({a_spot}) steht davor.': '{b_car} ({b_spot}) tiene que salir {b_when}, {a_car} ({a_spot}) está delante.',
+  'Umgeparkt ✓': 'Movido ✓',
+  'Du fährst übers Patio raus': 'Sales por el patio',
+  'Zugesagt: {route}. Parkt bis {when} jemand auf diesem Weg, sagt dir die App Bescheid.': 'Acordado: {route}. Si alguien aparca en ese camino antes de {when}, la app te avisará.',
+  'Zugesagt: {route}. Parkt bis {when} jemand auf diesem Weg, zeigt dir die App das hier an.': 'Acordado: {route}. Si alguien aparca en ese camino antes de {when}, la app lo mostrará aquí.',
+  'Doch nicht': 'Mejor no',
+  '{name} weicht übers Patio aus': '{name} saldrá por el patio',
+  'Du musst nichts tun. Wird der Patio-Weg zugeparkt, meldet sich die App wieder.': 'No tienes que hacer nada. Si alguien bloquea el camino del patio, la app te avisará.',
+  '{name} steht vor dir': '{name} está aparcado/a delante de ti',
+  'Du musst {b_when} raus, {name} fährt erst {a_when}.': 'Tienes que salir {b_when}, {name} no sale hasta {a_when}.',
+  '{name} muss {b_when} raus, du fährst erst {a_when}.': '{name} tiene que salir {b_when}, tú no sales hasta {a_when}.',
+  'Notlösung ohne {name}:': 'Salida de emergencia sin {name}:',
+  'Das Patio ist schmal und braucht etwas Rangieren. Der Weg ist jetzt frei; parkt bis dahin jemand darauf, sagt dir die App Bescheid.': 'El patio es estrecho y hay que maniobrar un poco. Ahora el camino está libre; si alguien aparca en él antes, la app te avisará.',
+  'Das Patio ist schmal und braucht etwas Rangieren. Der Weg ist jetzt frei; parkt bis dahin jemand darauf, zeigt dir die App das an.': 'El patio es estrecho y hay que maniobrar un poco. Ahora el camino está libre; si alguien aparca en él antes, la app te lo mostrará.',
+  'Kommt das für dich in Frage?': '¿Te sirve esta opción?',
+  'Nein, kommt nicht in Frage': 'No, no me sirve',
+  '{name} wird gerade gefragt, ob der Patio-Notweg in Frage kommt. Du kannst trotzdem schon einen Tausch anbieten.': 'Se está preguntando a {name} si le sirve la salida por el patio. Aun así, ya puedes proponer un intercambio.',
+  '{name} wird gefragt, ob der Patio-Notweg in Frage kommt. Du kannst trotzdem schon einen Tausch anbieten.': 'Se pregunta a {name} si le sirve la salida por el patio. Aun así, ya puedes proponer un intercambio.',
+  'Tausch vereinbart mit {name}': 'Intercambio acordado con {name}',
+  '{a} ↔ {b}: Parkt heute noch um und tippt dann hier.': '{a} ↔ {b}: Cambiad hoy de plaza y luego tocad aquí.',
+  'Getauscht ✓': 'Intercambiado ✓',
+  'Du lässt {name} raus': 'Dejas salir a {name}',
+  'Zugesagt: Du fährst {when} rechtzeitig zur Seite. Du bekommst vorher eine Erinnerung.': 'Acordado: te apartarás a tiempo {when}. Recibirás un recordatorio antes.',
+  'Zugesagt: Du fährst {when} rechtzeitig zur Seite.': 'Acordado: te apartarás a tiempo {when}.',
+  'Doch lieber heute tauschen': 'Mejor intercambiar hoy',
+  '{name} lässt dich raus': '{name} te dejará salir',
+  '{name} fährt {when} rechtzeitig zur Seite.': '{name} se apartará a tiempo {when}.',
+  'Lieber heute tauschen': 'Mejor intercambiar hoy',
+  '{name} möchte heute Abend tauschen': '{name} quiere intercambiar esta noche',
+  'Einverstanden': 'De acuerdo',
+  'Nein, ich fahre zur Seite': 'No, me apartaré',
+  'Nein danke': 'No, gracias',
+  'Warte auf {name}': 'Esperando a {name}',
+  'Du hast einen Tausch vorgeschlagen ({a} ↔ {b}). {name} wurde benachrichtigt.': 'Has propuesto un intercambio ({a} ↔ {b}). Se ha avisado a {name}.',
+  'Du hast einen Tausch vorgeschlagen ({a} ↔ {b}). {name} sieht den Vorschlag beim nächsten Öffnen.': 'Has propuesto un intercambio ({a} ↔ {b}). {name} verá la propuesta la próxima vez que abra la app.',
+  'Doch nicht – ich fahre zur Seite': 'Mejor no – me apartaré',
+  'Du blockierst {name}': 'Estás bloqueando a {name}',
+  'Heute Abend tauschen': 'Intercambiar esta noche',
+  'Ich fahre {time} zur Seite': 'Me aparto a las {time}',
+  'Tausch vorschlagen': 'Proponer intercambio',
+  'Wir klären das morgens': 'Lo arreglamos por la mañana',
+  'Angemeldet als {name}': 'Has iniciado sesión como {name}',
+
+  // Parken
+  'Auf {spot} parken': 'Aparcar en {spot}',
+  '{where} · Ausfahrt {way}': '{where} · salida {way}',
+  'Welches Auto?': '¿Qué coche?',
+  'Wann fährst du als Nächstes?': '¿Cuándo sales la próxima vez?',
+  'Datum & Uhrzeit': 'Fecha y hora',
+  'in 1 Std.': 'en 1 h',
+  'morgen 7:00': 'mañana 7:00',
+  'morgen 9:00': 'mañana 9:00',
+  'Hier geparkt': 'Aparcado aquí',
+  'Wie geplant · {when}': 'Según lo previsto · {when}',
+  'Wie üblich · {when}': 'Como siempre · {when}',
+  'Andere Zeit': 'Otra hora',
+  'Weiß ich noch nicht': 'Todavía no lo sé',
+  'Von {spot} hierher umparken': 'Mover aquí desde {spot}',
+  '⚠️ Du würdest {who} zuparken.': '⚠️ Bloquearías a {who}.',
+  ', käme nur noch über den Patio-Notweg raus': ', solo podría salir por el patio',
+  '⚠️ {name} will {when} über diesen Platz übers Patio raus ({route}). Wenn du hier parkst, ist dieser Notweg zu.': '⚠️ {name} quiere salir por el patio pasando por esta plaza {when} ({route}). Si aparcas aquí, esa salida queda bloqueada.',
+  '⚠️ {who} steht vor dir.': '⚠️ {who} está aparcado/a delante de ti.',
+  '⚠️ {who} stehen vor dir – einer davon müsste vorher weg.': '⚠️ {who} están aparcados delante de ti – uno de ellos tendría que moverse antes.',
+  'Ohne Ausfahrzeit giltst du für Autos hinter dir als Blockierer.': 'Sin hora de salida, cuentas como bloqueo para los coches que tienes detrás.',
+  'Tipp: Auf {spot} gäbe es keinen Konflikt.': 'Consejo: en {spot} no habría conflicto.',
+  'Dorthin': 'Ir allí',
+  '✓ Kein Konflikt mit deinen Nachbarn.': '✓ Ningún conflicto con tus vecinos.',
+  'Bitte eine Uhrzeit wählen': 'Elige una hora, por favor',
+
+  // Eigenes / fremdes Auto
+  'Geparkt {when}': 'Aparcado {when}',
+  'geparkt {when}': 'aparcado {when}',
+  'Nächste Ausfahrt': 'Próxima salida',
+  'einmalig': 'puntual',
+  'üblich': 'habitual',
+  'Andere Ausfahrt': 'Otra salida',
+  'Andere Ausfahrzeit eintragen': 'Indicar otra hora de salida',
+  'Übliche Fahrt {day} fällt aus': 'El viaje habitual de {day} no se hace',
+  'Geplante Fahrt löschen': 'Borrar viaje previsto',
+  'Ausfahrt gespeichert': 'Salida guardada',
+  'Übliche Fahrt ausgelassen': 'Viaje habitual omitido',
+
+  // Profil
+  'Hallo {name}': 'Hola, {name}',
+  'Dein Profil': 'Tu perfil',
+  'Name': 'Nombre',
+  'Wohnung / Klingel': 'Piso / timbre',
+  'Deine Autos': 'Tus coches',
+  'Keine übliche Ausfahrzeit': 'Sin hora de salida habitual',
+  '+ Auto hinzufügen': '+ Añadir coche',
+  'Sprache': 'Idioma',
+  'Benachrichtigungen': 'Notificaciones',
+  'Push ist auf dem Server nicht eingerichtet.': 'Las notificaciones push no están configuradas en el servidor.',
+  'Dieser Browser kann keine Push-Nachrichten. Auf dem iPhone: Teilen → „Zum Home-Bildschirm“, dann die App von dort öffnen.': 'Este navegador no puede recibir notificaciones push. En iPhone: Compartir → «Añadir a pantalla de inicio» y abre la app desde allí.',
+  'Aktiv auf {n} Gerät(en).': 'Activo en {n} dispositivo(s).',
+  'Noch nicht aktiviert.': 'Todavía no activado.',
+  'Auf diesem Gerät aktivieren': 'Activar en este dispositivo',
+  'Test senden': 'Enviar prueba',
+  'Test gesendet': 'Prueba enviada',
+  'Weitere Geräte': 'Otros dispositivos',
+  'Öffne diesen Link auf einem anderen Gerät, um dich dort anzumelden. Nicht weitergeben!': 'Abre este enlace en otro dispositivo para iniciar sesión allí. ¡No lo compartas!',
+  'Anmelde-Link kopieren': 'Copiar enlace de acceso',
+  'Link kopiert': 'Enlace copiado',
+  'Anmelde-Link:': 'Enlace de acceso:',
+  'Auf diesem Gerät abmelden': 'Cerrar sesión en este dispositivo',
+  'Abmelden? Ohne Anmelde-Link kommst du nicht mehr in dieses Profil.': '¿Cerrar sesión? Sin el enlace de acceso no podrás volver a este perfil.',
+  'Diese Version der App kann keine Push-Nachrichten schicken. Solange die Seite offen ist, siehst du neue Konflikte und Anfragen sofort, und der Tab-Titel zeigt die Anzahl.': 'Esta versión de la app no puede enviar notificaciones push. Mientras la página esté abierta, verás al instante los nuevos conflictos y solicitudes, y el título de la pestaña muestra cuántos hay.',
+  'Nachbarn einladen': 'Invitar a vecinos',
+  'Teile diese Seite über „Teilen“ mit deinen Nachbarn. Damit sie parken und antworten können, brauchen sie Bearbeitungsrechte, sonst können sie nur zuschauen.': 'Comparte esta página con tus vecinos mediante «Compartir». Para aparcar y responder necesitan permisos de edición; si no, solo pueden mirar.',
+  'Demo': 'Demo',
+  'Das ist eine Demo: Die Nachbarn sind Beispiele, und was du einträgst, bleibt nur in diesem Fenster. Lädst du die Seite neu, beginnt die Demo von vorn.': 'Esto es una demo: los vecinos son ejemplos y lo que introduzcas se queda solo en esta ventana. Si recargas la página, la demo empieza de nuevo.',
+
+  // Auto-Editor
+  'Neues Auto': 'Coche nuevo',
+  'Auto & Ausfahrzeiten': 'Coche y horas de salida',
+  'So erkennen dich die Nachbarn auf dem Parkplatz.': 'Así te reconocen los vecinos en el aparcamiento.',
+  'Name des Autos': 'Nombre del coche',
+  'z. B. Roter Golf': 'p. ej. Golf rojo',
+  'Kennzeichen (optional)': 'Matrícula (opcional)',
+  'Farbe': 'Color',
+  'Farbe {c}': 'Color {c}',
+  'Übliche Ausfahrzeiten': 'Horas de salida habituales',
+  'Fällt aus: {dates}': 'No se hace: {dates}',
+  'rückgängig': 'deshacer',
+  'Noch keine – z. B. Mo–Fr 07:30 zur Arbeit.': 'Todavía ninguna – p. ej. lun–vie 07:30 al trabajo.',
+  'Anlass (Arbeit)': 'Motivo (trabajo)',
+  '+ Übliche Zeit hinzufügen': '+ Añadir hora habitual',
+  'Einmalige Ausfahrten': 'Salidas puntuales',
+  'Keine geplant.': 'Ninguna prevista.',
+  'Notiz': 'Nota',
+  '+ Einmalige Ausfahrt': '+ Salida puntual',
+  'Patio-Notweg': 'Salida de emergencia por el patio',
+  'Rückwärts aufs schmale Patio rangieren und darüber rausfahren. Die App schlägt das nur als Notlösung vor und fragt dich jedes Mal vorher.': 'Entrar marcha atrás en el patio estrecho y salir por él. La app solo lo propone como solución de emergencia y te pregunta antes cada vez.',
+  'Bei Bedarf fragen': 'Preguntar si hace falta',
+  'Kommt nie in Frage': 'Nunca es una opción',
+  'Auto entfernen': 'Eliminar coche',
+  '{car} wirklich entfernen?': '¿Eliminar {car} de verdad?',
+  '{car} wirklich entfernen? Nochmal tippen': '¿Eliminar {car} de verdad? Toca otra vez',
+  'Auto angelegt': 'Coche añadido',
+  'Bitte Datum wählen': 'Elige una fecha, por favor',
+
+  // Anmeldung
+  'Willkommen auf dem Parkplatz 👋': 'Bienvenido/a al aparcamiento 👋',
+  'Trag ein, wo du stehst und wann du losfährst – die App sagt dir, wenn ihr euch zuparkt.': 'Indica dónde aparcas y cuándo sales – la app te avisa cuando os bloqueáis.',
+  'Trag ein, wo du stehst und wann du losfährst. Die App zeigt dir, wenn ihr euch zuparkt.': 'Indica dónde aparcas y cuándo sales. La app te muestra cuándo os bloqueáis.',
+  'Dein Name': 'Tu nombre',
+  'Dein Name, wie ihn die Nachbarn sehen': 'Tu nombre, tal como lo ven los vecinos',
+  'z. B. Anna': 'p. ej. Ana',
+  'Wohnung / Klingel (optional)': 'Piso / timbre (opcional)',
+  'z. B. 2. OG links': 'p. ej. 2.º izquierda',
+  'Einladungscode': 'Código de invitación',
+  'Wann fährst du normalerweise los?': '¿Cuándo sueles salir?',
+  'Zum Beispiel morgens zur Arbeit. Das kannst du später jederzeit ändern.': 'Por ejemplo, por la mañana al trabajo. Puedes cambiarlo cuando quieras.',
+  'Uhrzeit': 'Hora',
+  'Anlass': 'Motivo',
+  'Arbeit': 'Trabajo',
+  'Keine feste Zeit': 'Sin hora fija',
+  'Damit du erfährst, wenn du jemanden zuparkst – oder zugeparkt wirst.': 'Para que sepas cuándo bloqueas a alguien – o cuándo te bloquean a ti.',
+  'Auf dem iPhone: Teilen → „Zum Home-Bildschirm“, dann die App von dort öffnen und hier aktivieren.': 'En iPhone: Compartir → «Añadir a pantalla de inicio», abre la app desde allí y actívalo aquí.',
+  'Benachrichtigungen erlauben': 'Permitir notificaciones',
+  'Fertig! Tippe auf deinen Stellplatz.': '¡Listo! Toca tu plaza.',
+
+  // Push
+  'Push ist auf dem Server nicht eingerichtet': 'Las notificaciones push no están configuradas en el servidor',
+  'Dieser Browser unterstützt keine Push-Nachrichten': 'Este navegador no admite notificaciones push',
+  'Benachrichtigungen wurden nicht erlaubt': 'No se han permitido las notificaciones',
+  'Benachrichtigungen aktiv 🔔': 'Notificaciones activadas 🔔',
+
+  // Artefakt-Version: Hinweise, Speicher, Fehler
+  'Lade den Parkplatz …': 'Cargando el aparcamiento …',
+  'Die Daten sind gerade nicht erreichbar. Die Anzeige kann veraltet sein.': 'Ahora mismo no se puede acceder a los datos. Lo que ves puede no estar actualizado.',
+  '<b>Demo</b> · Hier ist kein gemeinsamer Speicher verfügbar. Du siehst Beispiel-Nachbarn, Änderungen bleiben nur in diesem Fenster.': '<b>Demo</b> · Aquí no hay almacenamiento compartido. Ves vecinos de ejemplo y los cambios se quedan solo en esta ventana.',
+  'Melde dich bei Claude an, um einen Stellplatz zu belegen.': 'Inicia sesión en Claude para ocupar una plaza.',
+  'Melde dich bei Claude an, um mitzumachen.': 'Inicia sesión en Claude para participar.',
+  'Bitte bei Claude anmelden, um mitzumachen.': 'Inicia sesión en Claude para participar, por favor.',
+  'Du kannst nur zuschauen. Bitte den Besitzer, dich als Bearbeiter einzuladen.': 'Solo puedes mirar. Pide al propietario que te invite como editor/a.',
+  'Du kannst hier nur zuschauen. Bitte den Besitzer, dich als Bearbeiter einzuladen.': 'Aquí solo puedes mirar. Pide al propietario que te invite como editor/a.',
+  'Der Speicher ist voll. Bitte alte Einträge löschen.': 'El almacenamiento está lleno. Borra entradas antiguas, por favor.',
+  'Speichern hat nicht geklappt. Bitte gleich nochmal versuchen.': 'No se ha podido guardar. Inténtalo de nuevo en un momento.',
+  'Auto nicht gefunden': 'Coche no encontrado',
+  'Bitte gib deinen Namen ein': 'Escribe tu nombre, por favor',
+  'Bitte gib dem Auto einen Namen': 'Ponle un nombre al coche, por favor',
+  'Mindestens einen Wochentag wählen': 'Elige al menos un día de la semana',
+  'Uhrzeit als HH:MM angeben': 'Indica la hora como HH:MM',
+  'Ausfahrzeit muss in der Zukunft liegen': 'La hora de salida tiene que ser en el futuro',
+  'Gerade parkt dort jemand anderes. Bitte gleich nochmal versuchen.': 'Alguien está aparcando ahí ahora mismo. Inténtalo de nuevo en un momento.',
+  'Der Platz ist schon belegt': 'La plaza ya está ocupada',
+  'Konflikt nicht mehr aktiv': 'El conflicto ya no está activo',
+  'Der Patio-Notweg steht hier nicht zur Wahl': 'La salida por el patio no es una opción aquí',
+  'Beide müssen dem Tausch zustimmen': 'Los dos tenéis que aceptar el intercambio',
+  'Das Auto ist gerade nicht geparkt': 'El coche no está aparcado ahora mismo',
+  'Deine Anfrage läuft schon': 'Tu solicitud ya está en curso',
+  'Du kommst raus – niemand steht im Weg': 'Puedes salir – nadie te bloquea',
+  'Bitte noch {n} Min. warten': 'Espera {n} min más, por favor',
+  '1. OG': '1.º piso',
+  '2. OG': '2.º piso',
+  'EG links': 'Bajo izquierda',
+  'EG rechts': 'Bajo derecha',
+  'Schule': 'Colegio',
+  'Ausflug': 'Excursión',
+  'Frühschicht': 'Turno de mañana',
+
+  // Hinweise in der offenen Seite (Artefakt)
+  'Patio-Notweg ist versperrt – bitte klärt den Konflikt': 'La salida por el patio está bloqueada – resolved el conflicto, por favor',
+  '{name} weicht übers Patio aus – du musst nichts tun': '{name} saldrá por el patio – no tienes que hacer nada',
+  'Du blockierst {name} ({spot})': 'Estás bloqueando a {name} ({spot})',
+  '🚗 {name} will gleich rausfahren!': '🚗 ¡{name} quiere salir ahora!',
+  '🔔 Erinnerung: {name} wartet': '🔔 Recordatorio: {name} está esperando',
+  '{name} kommt sofort': '{name} viene enseguida',
+  '{name} braucht noch ~15 Min.': '{name} necesita unos 15 min más',
+  'Weg ist frei 🚗 Du kannst jetzt rausfahren.': 'El camino está libre 🚗 Ya puedes salir.',
 };
 
 // Parkoptimierer – Artefakt-Version
@@ -1906,11 +2256,8 @@ function openProfile() {
     <label class="field">${t('Name')}<input type="text" id="pfName" value="${esc(me.display_name)}" maxlength="40"></label>
     <label class="field">${t('Wohnung / Klingel')}<input type="text" id="pfUnit" value="${esc(me.unit ?? '')}" maxlength="30"></label>
     <button class="btn block" id="pfSave">${t('Speichern')}</button>
-    <h3>${LANG === 'de' ? 'Sprache · Language' : 'Language · Sprache'}</h3>
-    <div class="chips" id="pfLang">
-      <button class="chip" data-lang="de" aria-pressed="${LANG === 'de'}">Deutsch</button>
-      <button class="chip" data-lang="en" aria-pressed="${LANG === 'en'}">English</button>
-    </div>
+    <h3>${t('Sprache')}${LANG === 'en' ? '' : ' · Language'}</h3>
+    <div class="chips" id="pfLang">${LANGS.map((l) => `<button class="chip" data-lang="${l}" aria-pressed="${LANG === l}">${LANG_NAMES[l]}</button>`).join('')}</div>
     <h3>${t('Deine Autos')}</h3>
     <div class="list">${myCars().map((c) => `
       <button class="item" style="border:0;text-align:left;cursor:pointer" data-car="${esc(c.id)}">

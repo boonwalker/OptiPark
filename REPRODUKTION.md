@@ -13,7 +13,7 @@ Claude Code in der iPhone-App arbeitet in einer **Cloud-Umgebung (Linux)**, die 
 
 Falls die Sitzung zwischendurch stoppt: einfach „Mach weiter nach REPRODUKTION.md“ schreiben, der bisherige Stand liegt ja im Branch.
 
-Stand: 07.11.2026. Sprache der App: **Deutsch** (Du-Form) als Grundsprache, zusätzlich **Englisch** (Abschnitt „Sprachen“ in 12a). Alle Texte stehen im Code auf Deutsch und werden über eine Übersetzungstabelle ins Englische gebracht.
+Stand: 07.11.2026. Sprache der App: **Deutsch** (Du-Form) als Grundsprache, zusätzlich **Englisch** und **Spanisch** (tú-Form) (Abschnitt „Sprachen“ in 12a). Alle Texte stehen im Code auf Deutsch und werden über Übersetzungstabellen ins Englische und Spanische gebracht.
 
 ---
 
@@ -68,7 +68,7 @@ server/departures.py     nächste Ausfahrt je Auto
 server/conflicts.py      Konflikterkennung + Nachrichtentexte + Erinnerungen
 server/leave_requests.py „Ich will gleich rausfahren“
 server/push.py           Web-Push mit VAPID
-server/i18n.py           Übersetzungen Deutsch → Englisch für Nachrichten und Fehler
+server/i18n.py           Übersetzungen Deutsch → Englisch/Spanisch für Nachrichten und Fehler
 server/db.py             Verbindung, Transaktionen, Init + Seed
 server/app.py            HTTP-API, statische Dateien, Minuten-Ticker
 server/demo.py           Demo-Daten
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS resident (
     display_name  TEXT    NOT NULL,
     unit          TEXT,                       -- Wohnung / Klingel, optional
     auth_token    TEXT    NOT NULL UNIQUE,    -- persönlicher Geräteschlüssel
-    lang          TEXT    NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en')),  -- Sprache für Nachrichten
+    lang          TEXT    NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en', 'es')),  -- Sprache für Nachrichten
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -292,7 +292,7 @@ INSERT OR IGNORE INTO meta(key, value) VALUES ('version', '0');
 `db.py`:
 - `connect()`: `isolation_level=None`, `row_factory=sqlite3.Row`, `PRAGMA foreign_keys=ON`, `journal_mode=WAL`.
 - `tx()`: Kontextmanager mit globalem `threading.Lock`, `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`. `read()`: einfache Leseverbindung.
-- `init()`: Ordner anlegen, Schema per `executescript`, dann `_migrate()` (ältere Datenbanken: Spalten `car.patio_route` und `resident.lang` per `ALTER TABLE` ergänzen; fehlt `conflict.patio_choice`, die abgeleitete Tabelle `conflict` löschen und neu anlegen), beim ersten Mal Seed aus `layout.py` (lot, zones, spots), danach **immer** `rules.load_exits(conn)`.
+- `init()`: Ordner anlegen, Schema per `executescript`, dann `_migrate()` (ältere Datenbanken: Spalten `car.patio_route` und `resident.lang` per `ALTER TABLE` ergänzen; erlaubt die Sprach-Prüfung von `resident` noch kein `'es'`, wird die Tabelle mit `PRAGMA foreign_keys = OFF` neu angelegt und umbenannt, damit die Autos erhalten bleiben; fehlt `conflict.patio_choice`, die abgeleitete Tabelle `conflict` löschen und neu anlegen), beim ersten Mal Seed aus `layout.py` (lot, zones, spots), danach **immer** `rules.load_exits(conn)`.
 - `bump_version(conn)`: erhöht `meta.version` (Clients pollen das).
 - Hilfen: `utcnow()` (ohne Mikrosekunden), `iso(dt)`, `parse_iso(s)`.
 
@@ -614,7 +614,7 @@ Legt (falls noch nicht vorhanden) an und gibt Anmelde-Links `http://localhost:80
 
 ---
 
-## 12. Tests (müssen alle grün sein, aktuell 55)
+## 12. Tests (müssen alle grün sein, aktuell 57)
 
 `tests/test_rules.py` (Hilfsmethode `park(L5=7, L3=9, L4=None)` = Platz → Stunden bis zur Ausfahrt, `None` = unbekannt; Ergebnis als Menge `"Blocker→Blockierter"`):
 
@@ -691,12 +691,13 @@ Ergänzend im API-Test: Nach Schritt 6 parkt Anna neu so, dass Ben auf R2 hinter
 `tests/test_i18n.py` (Sprachen):
 - `t("en", "{name} steht vor dir", name="Ben")` = „Ben is parked in front of you“; ohne Übersetzung bleibt der deutsche Text; unbekannte Sprache → `de`.
 - `fmt_when` auf Englisch: „tomorrow 13:00“, „Fri 13 Nov 13:00“ (Deutsch „Fr 13.11. 13:00“); `fmt_route(..., "en")` = „reverse onto P1, then out via P2 → L7“.
-- Jede englische Vorlage hat genau dieselben `{platzhalter}` wie die deutsche.
+- Jede englische und spanische Vorlage hat genau dieselben `{platzhalter}` wie die deutsche; Spanisch hat dieselben Texte wie Englisch.
+- Spanisch: `fmt_when` „vie 13 nov 13:00“, „pasado mañana 13:00“; `fmt_route` „marcha atrás hasta P1, luego salir por P2 → L7“; Ben und Clara (beide es) → „Clara está aparcado/a delante de ti“ mit „¿Intercambiar plazas esta noche?“, „Estás bloqueando a Ben“.
 - Ben (en) R2 7 h, Clara (de) R1 9 h → Ben bekommt „Clara is parked in front of you“ mit „Swap spots this evening?“, Clara „Du blockierst Ben“ mit „Heute Abend tauschen?“.
 - Patio-Rückfrage an Ben (en) enthält „Fallback: reverse onto P1“ und „Does that work for you?“.
 - Rausfahr-Anfrage von Ben (de), Clara (en) im Weg → Titel „Ben wants to leave now“; sofortiges Nachklingeln → `RequestError`, übersetzt „Please wait … more min.“.
 
-Am Ende: `python -m unittest discover tests -v` → **alle grün** (55 aus den Tabellen oben + der API-Test).
+Am Ende: `python -m unittest discover tests -v` → **alle grün** (57 aus den Tabellen oben + der API-Test).
 
 ### 12b. Konflikte anderer
 
@@ -704,8 +705,8 @@ Am Ende: `python -m unittest discover tests -v` → **alle grün** (55 aus den T
 
 ### 12a. Sprachen
 
-- **Server** (`server/i18n.py`): Tabelle `EN` (deutscher Text mit `{platzhaltern}` → englischer Text), `t(lang, text, **werte)`, `norm(lang)` (alles außer `de`/`en` → `de`), `lang_of(conn, resident_id)`, `fmt_day(lang, datum, tage_ab_heute)`. Nachrichten (`conflicts._msg`, `leave_requests._msg`/`_blocker_messages`) werden **je Empfänger** in dessen `resident.lang` geschrieben; `fmt_when(..., lang)` und `fmt_route(..., lang)` nehmen die Sprache als letzten Parameter (Standard `de`). `ApiError`/`RequestError` tragen den deutschen Text plus Werte; übersetzt wird beim Antworten nach dem Header `X-Lang` (sonst Sprache des Nachbarn, sonst Deutsch). `patio_text` in `/api/state` in der Sprache der Anfrage. `POST /api/register` nimmt `lang`, `PATCH /api/me` nimmt `{lang}` allein.
-- **Oberfläche** (`web/i18n.js`, vor `app.js` geladen und in die Artefakt-Seite eingebaut): `LANG` = von Hand gewählt (`localStorage park.lang`), sonst Englisch, wenn `navigator.language` mit `en` beginnt, sonst Deutsch. `t(deutscherText, {werte})`, `I18N_EN`, `WD_SHORT`, `fmtDay`, `translateStatic()` für `data-i18n`/`data-i18n-aria` in `index.html`. Im Profil Umschalter „Deutsch / English“ (speichert, meldet die Sprache an den Server, lädt neu). Nach dem ersten Laden gleicht die App `me.lang` mit `LANG` ab, damit Benachrichtigungen in der richtigen Sprache kommen. Bereichsnamen aus der Datenbank werden beim Anzeigen übersetzt („Tür 1 · links“ → „Door 1 · left“).
+- **Server** (`server/i18n.py`): Tabellen `EN` und `ES` (deutscher Text mit `{platzhaltern}` → Übersetzung), `LANGS = (de, en, es)`, `t(lang, text, **werte)`, `norm(lang)` (alles Unbekannte → `de`, betrifft nur fehlende Angaben in alten Daten), `lang_of(conn, resident_id)`, `fmt_day(lang, datum, tage_ab_heute)`. Nachrichten (`conflicts._msg`, `leave_requests._msg`/`_blocker_messages`) werden **je Empfänger** in dessen `resident.lang` geschrieben; `fmt_when(..., lang)` und `fmt_route(..., lang)` nehmen die Sprache als letzten Parameter (Standard `de`). `ApiError`/`RequestError` tragen den deutschen Text plus Werte; übersetzt wird beim Antworten nach dem Header `X-Lang` (sonst Sprache des Nachbarn, sonst Deutsch). `patio_text` in `/api/state` in der Sprache der Anfrage. `POST /api/register` nimmt `lang`, `PATCH /api/me` nimmt `{lang}` allein.
+- **Oberfläche** (`web/i18n.js`, vor `app.js` geladen und in die Artefakt-Seite eingebaut): `LANG` = von Hand gewählt (`localStorage park.lang`), sonst nach `navigator.language`: beginnt mit `de` → Deutsch, mit `es` → Spanisch, **sonst Englisch**. `t(deutscherText, {werte})`, `I18N_EN`, `I18N_ES`, `LANGS`, `LANG_NAMES`, `WD_SHORT`, `fmtDay`, `translateStatic()` für `data-i18n`/`data-i18n-aria` in `index.html`. Im Profil Umschalter „Deutsch / English / Español“ (speichert, meldet die Sprache an den Server, lädt neu). Nach dem ersten Laden gleicht die App `me.lang` mit `LANG` ab, damit Benachrichtigungen in der richtigen Sprache kommen. Bereichsnamen aus der Datenbank werden beim Anzeigen übersetzt („Tür 1 · links“ → „Door 1 · left“).
 
 ---
 

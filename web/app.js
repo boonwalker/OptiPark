@@ -814,11 +814,8 @@ function openProfile() {
     <label class="field">${t('Wohnung / Klingel')}<input type="text" id="pfUnit" value="${esc(me.unit ?? '')}" maxlength="30"></label>
     <button class="btn block" id="pfSave">${t('Speichern')}</button>
 
-    <h3>${LANG === 'de' ? 'Sprache · Language' : 'Language · Sprache'}</h3>
-    <div class="chips" id="pfLang">
-      <button class="chip" data-lang="de" aria-pressed="${LANG === 'de'}">Deutsch</button>
-      <button class="chip" data-lang="en" aria-pressed="${LANG === 'en'}">English</button>
-    </div>
+    <h3>${t('Sprache')}${LANG === 'en' ? '' : ' · Language'}</h3>
+    <div class="chips" id="pfLang">${LANGS.map((l) => `<button class="chip" data-lang="${l}" aria-pressed="${LANG === l}">${LANG_NAMES[l]}</button>`).join('')}</div>
 
     <h3>${t('Deine Autos')}</h3>
     <div class="list">${myCars().map((c) => `

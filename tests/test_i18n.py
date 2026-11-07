@@ -19,6 +19,7 @@ class Uebersetzung(unittest.TestCase):
         self.assertEqual(i18n.t("de", "{name} steht vor dir", name="Ben"), "Ben steht vor dir")
         self.assertEqual(i18n.t("en", "Gibt es nicht"), "Gibt es nicht")   # keine Übersetzung → Deutsch
         self.assertEqual(i18n.norm("fr"), "de")
+        self.assertEqual(i18n.t("es", "{name} steht vor dir", name="Ben"), "Ben está aparcado/a delante de ti")
 
     def test_zeit_und_weg_auf_englisch(self):
         tz = ZoneInfo("Europe/Berlin")
@@ -29,11 +30,18 @@ class Uebersetzung(unittest.TestCase):
         route = {"reverse": ["P1"], "forward": ["P2", "L7"]}
         self.assertEqual(conflicts.fmt_route(route, "en"), "reverse onto P1, then out via P2 → L7")
         self.assertEqual(conflicts.fmt_route(route), "rückwärts auf P1, dann über P2 → L7 hinaus")
+        self.assertEqual(conflicts.fmt_when(now + timedelta(days=4), now, tz, "es"), "vie 13 nov 13:00")
+        self.assertEqual(conflicts.fmt_when(now + timedelta(days=2), now, tz, "es"), "pasado mañana 13:00")
+        self.assertEqual(conflicts.fmt_route(route, "es"), "marcha atrás hasta P1, luego salir por P2 → L7")
 
-    def test_jede_englische_vorlage_hat_dieselben_platzhalter(self):
+    def test_jede_vorlage_hat_dieselben_platzhalter(self):
         import re
-        for de, en in i18n.EN.items():
-            self.assertEqual(set(re.findall(r"\{(\w+)\}", de)), set(re.findall(r"\{(\w+)\}", en)), de)
+        for table in (i18n.EN, i18n.ES):
+            for de, other in table.items():
+                self.assertEqual(set(re.findall(r"\{(\w+)\}", de)), set(re.findall(r"\{(\w+)\}", other)), de)
+
+    def test_spanisch_hat_dieselben_texte_wie_englisch(self):
+        self.assertEqual(set(i18n.ES), set(i18n.EN))
 
 
 class NachrichtenJeSprache(unittest.TestCase):
@@ -70,6 +78,16 @@ class NachrichtenJeSprache(unittest.TestCase):
         self.assertIn("Swap spots this evening?", to_ben["body"])
         self.assertEqual(to_clara["title"], "Du blockierst Ben")
         self.assertIn("Heute Abend tauschen?", to_clara["body"])
+
+    def test_konflikt_auf_spanisch(self):
+        self.park("R2", "Ben", 7, lang="es")
+        self.park("R1", "Clara", 9, lang="es")
+        notes = conflicts.recompute(self.conn, self.now)
+        to_ben = next(n for n in notes if n["resident_id"] == self.rid["Ben"])
+        to_clara = next(n for n in notes if n["resident_id"] == self.rid["Clara"])
+        self.assertEqual(to_ben["title"], "Clara está aparcado/a delante de ti")
+        self.assertIn("¿Intercambiar plazas esta noche?", to_ben["body"])
+        self.assertEqual(to_clara["title"], "Estás bloqueando a Ben")
 
     def test_patio_rueckfrage_auf_englisch(self):
         self.park("R2", "Ben", 7, lang="en", patio="ask")

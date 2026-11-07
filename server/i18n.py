@@ -1,4 +1,4 @@
-"""Sprachen: Deutsch (Grundsprache) und Englisch.
+"""Sprachen: Deutsch (Grundsprache), Englisch und Spanisch.
 
 Texte stehen im Code auf Deutsch, mit {platzhaltern}. t(lang, text, **werte)
 liefert die Übersetzung (oder den deutschen Text, wenn keine da ist) und setzt
@@ -7,7 +7,7 @@ Benachrichtigungen werden in dieser Sprache geschrieben. Fehlermeldungen der
 API richten sich nach dem Header X-Lang der Anfrage.
 """
 
-LANGS = ("de", "en")
+LANGS = ("de", "en", "es")
 
 EN = {
     # Zeitangaben
@@ -102,9 +102,104 @@ EN = {
     "Push-Nachrichten funktionieren.": "Push notifications are working.",
 }
 
+ES = {
+    # Zeitangaben
+    "unbekannt": "desconocido",
+    "heute": "hoy",
+    "morgen": "mañana",
+    "übermorgen": "pasado mañana",
+    "zu unbekannter Zeit": "a una hora desconocida",
+    # Patio-Notweg
+    "rückwärts über {via} auf {to}": "marcha atrás por {via} hasta {to}",
+    "rückwärts auf {to}": "marcha atrás hasta {to}",
+    ", dann über {via} hinaus": ", luego salir por {via}",
+    ", dann hinaus": ", luego salir",
+    # Konflikte
+    "Du stehst dir selbst im Weg": "Te estás bloqueando a ti mismo/a",
+    "{b_car} ({b_spot}) muss {b_when} raus, {a_car} ({a_spot}) steht davor.":
+        "{b_car} ({b_spot}) tiene que salir {b_when}, {a_car} ({a_spot}) está delante.",
+    "Du blockierst {name}": "Estás bloqueando a {name}",
+    "{b_name} muss {b_when} raus ({b_spot}), du fährst erst {a_when}.":
+        "{b_name} tiene que salir {b_when} ({b_spot}), tú no sales hasta {a_when}.",
+    "{name} wird gefragt, ob der Patio-Notweg in Frage kommt.":
+        "Se pregunta a {name} si le sirve la salida por el patio.",
+    "{name} steht vor dir": "{name} está aparcado/a delante de ti",
+    "Du musst {b_when} raus, {a_name} ({a_spot}) fährt erst {a_when}.":
+        "Tienes que salir {b_when}, {a_name} ({a_spot}) no sale hasta {a_when}.",
+    "Notlösung: {route}. Kommt das für dich in Frage?": "Salida de emergencia: {route}. ¿Te sirve esta opción?",
+    "Heute Abend tauschen?": "¿Intercambiar plazas esta noche?",
+    "{name} weicht übers Patio aus": "{name} saldrá por el patio",
+    "Du musst nichts tun.": "No tienes que hacer nada.",
+    "{name} kann nicht übers Patio ausweichen": "{name} no puede salir por el patio",
+    "{a_spot} steht vor {b_spot}. Heute Abend tauschen?": "{a_spot} está delante de {b_spot}. ¿Intercambiar plazas esta noche?",
+    "{name} kommt nicht mehr übers Patio raus. Bitte klärt den Konflikt ({a_spot} ↔ {b_spot}).":
+        "{name} ya no puede salir por el patio. Resolved el conflicto, por favor ({a_spot} ↔ {b_spot}).",
+    "Patio-Notweg ist versperrt": "La salida por el patio está bloqueada",
+    "Tausch vereinbart": "Intercambio acordado",
+    "{a_spot} ↔ {b_spot}: Bitte heute noch umparken und in der App „Getauscht“ tippen.":
+        "{a_spot} ↔ {b_spot}: Cambiad hoy de plaza y tocad «Intercambiado» en la app, por favor.",
+    "{name} möchte tauschen": "{name} quiere intercambiar",
+    "{a_spot} ↔ {b_spot} – bist du einverstanden?": "{a_spot} ↔ {b_spot} – ¿estás de acuerdo?",
+    "{name} lässt dich raus": "{name} te dejará salir",
+    "{name} fährt {when} rechtzeitig zur Seite.": "{name} se apartará a tiempo {when}.",
+    "Gleich: {name} muss raus": "En breve: {name} tiene que salir",
+    "{b_car} auf {b_spot} fährt {when} – dein Auto auf {a_spot} steht davor.":
+        "{b_car} en {b_spot} sale {when} – tu coche en {a_spot} está delante.",
+    # „Ich will gleich rausfahren“
+    "Dein {car} auf {spot} steht {name} ({their_spot}) im Weg. Bitte kurz umparken.":
+        "Tu {car} en {spot} bloquea a {name} ({their_spot}). Por favor, muévelo un momento.",
+    " Alternativ könnte auch {who} Platz machen.": " También podría dejar paso {who}.",
+    " oder ": " o ",
+    "Erinnerung: {name} wartet": "Recordatorio: {name} está esperando",
+    "{name} will gleich rausfahren": "{name} quiere salir ahora",
+    "Deine Anfrage läuft schon": "Tu solicitud ya está en curso",
+    "Das Auto ist gerade nicht geparkt": "El coche no está aparcado ahora mismo",
+    "Du kommst raus – niemand steht im Weg": "Puedes salir – nadie te bloquea",
+    "Anfrage nicht (mehr) offen": "La solicitud ya no está abierta",
+    "Bitte noch {n} Min. warten": "Espera {n} min más, por favor",
+    "Du stehst bei dieser Anfrage nicht im Weg": "No estás bloqueando en esta solicitud",
+    "{name} kommt sofort": "{name} viene enseguida",
+    "{name} braucht noch ~{n} Min.": "{name} necesita unos {n} min más",
+    "Auto auf {spot} wird umgeparkt.": "Se está moviendo el coche de {spot}.",
+    "Weg ist frei 🚗": "El camino está libre 🚗",
+    "Du kannst jetzt rausfahren.": "Ya puedes salir.",
+    # API-Fehler
+    "Auto nicht gefunden": "Coche no encontrado",
+    "„{key}“ fehlt": "Falta «{key}»",
+    "Einladungscode stimmt nicht": "El código de invitación no es correcto",
+    "Ungültige Farbe": "Color no válido",
+    "Ungültige Einstellung": "Ajuste no válido",
+    "Ungültige Sprache": "Idioma no válido",
+    "Mindestens einen Wochentag wählen": "Elige al menos un día de la semana",
+    "Uhrzeit als HH:MM angeben": "Indica la hora como HH:MM",
+    "Nicht gefunden": "No encontrado",
+    "Datum als JJJJ-MM-TT angeben": "Indica la fecha como AAAA-MM-DD",
+    "Ausfahrzeit muss in der Zukunft liegen": "La hora de salida tiene que ser en el futuro",
+    "Stellplatz nicht gefunden": "Plaza no encontrada",
+    "Der Platz ist schon belegt": "La plaza ya está ocupada",
+    "Konflikt nicht (mehr) aktiv": "El conflicto ya no está activo",
+    "Nicht dein Konflikt": "No es tu conflicto",
+    "Ungültige Auswahl": "Opción no válida",
+    "Der Patio-Notweg steht hier nicht zur Wahl": "La salida por el patio no es una opción aquí",
+    "Beide müssen dem Tausch zustimmen": "Los dos tenéis que aceptar el intercambio",
+    "Anfrage nicht gefunden": "Solicitud no encontrada",
+    "Ungültige Antwort": "Respuesta no válida",
+    "Nicht dein Auto": "No es tu coche",
+    "Ungültiges Push-Abo": "Suscripción push no válida",
+    "Methode nicht erlaubt": "Método no permitido",
+    "Bitte zuerst anmelden": "Inicia sesión primero, por favor",
+    "Unbekannter Endpunkt": "Dirección desconocida",
+    "Interner Fehler": "Error interno",
+    "Ungültiges JSON": "JSON no válido",
+    # Push-Test
+    "Push-Nachrichten funktionieren.": "Las notificaciones push funcionan.",
+}
+
 WEEKDAYS = {"de": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
-            "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
-MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            "es": ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]}
+MONTHS = {"en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+          "es": ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]}
 
 
 def norm(lang):
@@ -113,7 +208,8 @@ def norm(lang):
 
 
 def t(lang, text, **values):
-    s = EN.get(text, text) if lang == "en" else text
+    table = {"en": EN, "es": ES}.get(lang)
+    s = table.get(text, text) if table else text
     return s.format(**values) if values else s
 
 
@@ -123,11 +219,11 @@ def lang_of(conn, resident_id):
 
 
 def fmt_day(lang, local_date, days_from_today):
-    """Tag als Wort („morgen“) oder kurz mit Datum („Mo 10.11.“ / „Mon 10 Nov“)."""
+    """Tag als Wort („morgen“) oder kurz mit Datum („Mo 10.11.“ / „Mon 10 Nov“ / „lun 10 nov“)."""
     word = {0: "heute", 1: "morgen", 2: "übermorgen"}.get(days_from_today)
     if word:
         return t(lang, word)
     wd = WEEKDAYS[lang][local_date.weekday()]
-    if lang == "en":
-        return f"{wd} {local_date.day} {MONTHS_EN[local_date.month - 1]}"
+    if lang in MONTHS:
+        return f"{wd} {local_date.day} {MONTHS[lang][local_date.month - 1]}"
     return f"{wd} {local_date:%d.%m.}"

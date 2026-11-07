@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -86,11 +87,33 @@ def _migrate(conn, schema):
         conn.execute("ALTER TABLE car ADD COLUMN patio_route TEXT NOT NULL DEFAULT 'ask' "
                      "CHECK (patio_route IN ('ask', 'never'))")
     if "lang" not in cols("resident"):
-        conn.execute("ALTER TABLE resident ADD COLUMN lang TEXT NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en'))")
+        conn.execute("ALTER TABLE resident ADD COLUMN lang TEXT NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en', 'es'))")
+    _allow_all_langs(conn, schema)
     if "patio_choice" not in cols("conflict"):
         # Konflikte sind abgeleitete Daten: Tabelle neu anlegen (neuer Status 'patio').
         conn.execute("DROP TABLE conflict")
         conn.executescript(schema)
+
+
+def _allow_all_langs(conn, schema):
+    """Datenbanken aus der Zeit mit nur Deutsch/Englisch: resident-Tabelle mit der
+    aktuellen Sprach-Prüfung neu anlegen (SQLite kann CHECK nicht ändern)."""
+    sql = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'resident'").fetchone()[0]
+    if "'es'" in sql:
+        return
+    create = re.search(r"CREATE TABLE IF NOT EXISTS resident \(.*?\n\);", schema, re.S).group(0)
+    cols = "id, lot_id, display_name, unit, auth_token, lang, created_at"
+    conn.execute("PRAGMA foreign_keys = OFF")   # sonst würde DROP TABLE die Autos mitlöschen
+    try:
+        conn.executescript(
+            "BEGIN;"
+            + create.replace("IF NOT EXISTS resident (", "resident_new (")
+            + f"INSERT INTO resident_new({cols}) SELECT {cols} FROM resident;"
+            "DROP TABLE resident;"
+            "ALTER TABLE resident_new RENAME TO resident;"
+            "COMMIT;")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def _seed(conn):
