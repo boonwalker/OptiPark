@@ -1,6 +1,7 @@
 # Artefakt-Version
 
-Veröffentlicht unter https://claude.ai/artifact/HuJPxHfX9NL27MDB6Gu4zP
+Veröffentlicht unter https://claude.ai/artifact/64M4mtLXP2Mwj1XMfCZueu (Prototyp zum Teilen, Speicher-Regeln: `residents` lesen alle, schreiben nur der eigene Eintrag `residents/{self}`; `spots`, `decisions`, `requests` dürfen alle Mitnutzer schreiben).
+Ältere Version (anderer Claude-Account): https://claude.ai/artifact/HuJPxHfX9NL27MDB6Gu4zP
 
 - `app.js`: Logik der Artefakt-Version (gemeinsamer Speicher statt Python-Server)
 - `build.py`: setzt `parkplatz.html` aus `web/styles.css`, `web/index.html` und `app.js` zusammen:
