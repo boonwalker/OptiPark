@@ -8,6 +8,10 @@ Ein Konflikt liegt vor, wenn
   * Auto A eines dieser Hindernisse ist – genauer: eines, an das B als Erstes stößt.
 Pro Paar (A, B) und Ausfahrzeit entsteht genau ein Konflikt.
 
+„Nicht da“: Ist der Besitzer von A zu Bs Ausfahrzeit nicht da, kann A nicht
+umparken. Solche Konflikte werden für die ganze Abwesenheit erkannt (nicht nur
+36 h), B erfährt, dass A bis wann weg ist, und A bekommt keine Erinnerung.
+
 Patio-Notweg: Könnte B zu seiner Ausfahrzeit rückwärts aufs Patio und von dort
 hinaus, ohne dass irgendwer umparken muss (rules.patio_route), und schließt Bs
 Auto das nicht grundsätzlich aus (car.patio_route = 'never'), wird der Weg am
@@ -28,7 +32,7 @@ from zoneinfo import ZoneInfo
 
 from . import i18n, rules
 from .db import iso, parse_iso
-from .departures import next_departures
+from .departures import away_windows, is_away, next_departures
 
 HORIZON = timedelta(hours=36)       # so weit im Voraus wird gewarnt
 REMIND_BEFORE = timedelta(minutes=45)
@@ -81,11 +85,16 @@ def find_blockings(conn, now):
     patios = rules.patio_spots(conn)
     codes = {r[0]: r[1] for r in conn.execute("SELECT id, code FROM spot")}
     by_spot = {p["spot_id"]: p for p in parked}
+    away = away_windows(conn, [p["car_id"] for p in parked], now)
+    away_horizon = max([w[1] for w in away.values()] + [now])
 
     wanted = {}
     for b in parked:
         b_dep = nd.get(b["car_id"])
-        if not b_dep or b_dep["at"] - now > HORIZON:
+        if not b_dep:
+            continue
+        far = b_dep["at"] - now > HORIZON     # jenseits von 36 h nur, wenn ein Blockierer dann nicht da ist
+        if far and b_dep["at"] >= away_horizon:
             continue
         still_there = {
             p["spot_id"] for p in parked
@@ -93,6 +102,8 @@ def find_blockings(conn, now):
             and (p["car_id"] not in nd or nd[p["car_id"]]["at"] > b_dep["at"])
         }
         found = rules.blockers(moves, b["spot_id"], still_there)
+        if far:
+            found = {s for s in found if is_away(away.get(by_spot[s]["car_id"]), b_dep["at"])}
         route = None
         if found and b["patio_pref"] != "never":
             # Vorsichtig: Der Notweg muss JETZT frei sein. Auch Autos, die vor B
@@ -165,6 +176,7 @@ def conflict_details(conn, cid):
         SELECT c.*,
                ca.id AS blocker_car_id, ca.nickname AS blocker_car, ra.id AS blocker_resident_id,
                ra.display_name AS blocker_name, sa.code AS blocker_spot,
+               ra.away_from AS blocker_away_from, ra.away_until AS blocker_away_until,
                cb.id AS blocked_car_id, cb.nickname AS blocked_car, rb.id AS blocked_resident_id,
                rb.display_name AS blocked_name, sb.code AS blocked_spot
         FROM conflict c
@@ -181,6 +193,14 @@ def _tz(conn):
     return ZoneInfo(conn.execute("SELECT timezone FROM lot LIMIT 1").fetchone()[0])
 
 
+def blocker_away(d):
+    """Ist der Blockierer zu Bs Ausfahrzeit nicht da? Dann bis wann (ISO), sonst None."""
+    until, start = d["blocker_away_until"], d["blocker_away_from"]
+    if until and (start or "") <= d["blocked_departs_at"] < until:
+        return until
+    return None
+
+
 def _msg(conn, resident_id, cid, title, body, **values):
     """Nachricht in der Sprache des Empfängers. Werte, die selbst übersetzt werden
     müssen (Zeiten, Wege), werden als Funktion lang → Text übergeben."""
@@ -192,6 +212,8 @@ def _msg(conn, resident_id, cid, title, body, **values):
 
 
 def _when(iso_str, now, tz):
+    if not iso_str:   # „… fährt erst zu unbekannter Zeit“
+        return lambda lang: i18n.t(lang, "zu unbekannter Zeit")
     return lambda lang: fmt_when(parse_iso(iso_str), now, tz, lang)
 
 
@@ -206,17 +228,26 @@ def _new_conflict_messages(conn, cid, now):
                      "{b_car} ({b_spot}) muss {b_when} raus, {a_car} ({a_spot}) steht davor.", **v)]
     to_a = "{b_name} muss {b_when} raus ({b_spot}), du fährst erst {a_when}."
     to_b = "Du musst {b_when} raus, {a_name} ({a_spot}) fährt erst {a_when}."
+    away_until = blocker_away(d)
+    if away_until:
+        v["away_until"] = _when(away_until, now, tz)
+        to_a = [to_a, " ", "Du bist dann nicht da – bitte vorher umparken oder einen Tausch vereinbaren."]
+        to_b = [to_b, " ", "{a_name} ist bis {away_until} nicht da und kann das Auto nicht wegfahren."]
+    else:
+        to_a, to_b = [to_a], [to_b]
     if d["patio_route"]:
         route = lambda lang: fmt_route(d["patio_route"], lang)
         return [
-            _msg(conn, a, cid, "Du blockierst {name}", [to_a, " ", "{name} wird gefragt, ob der Patio-Notweg in Frage kommt."],
+            _msg(conn, a, cid, "Du blockierst {name}", to_a + [" ", "{name} wird gefragt, ob der Patio-Notweg in Frage kommt."],
                  name=d["blocked_name"], **v),
-            _msg(conn, b, cid, "{name} steht vor dir", [to_b, " ", "Notlösung: {route}. Kommt das für dich in Frage?"],
+            _msg(conn, b, cid, "{name} steht vor dir", to_b + [" ", "Notlösung: {route}. Kommt das für dich in Frage?"],
                  name=d["blocker_name"], route=route, **v),
         ]
     return [
-        _msg(conn, a, cid, "Du blockierst {name}", [to_a, " ", "Heute Abend tauschen?"], name=d["blocked_name"], **v),
-        _msg(conn, b, cid, "{name} steht vor dir", [to_b, " ", "Heute Abend tauschen?"], name=d["blocker_name"], **v),
+        _msg(conn, a, cid, "Du blockierst {name}", to_a + ([] if away_until else [" ", "Heute Abend tauschen?"]),
+             name=d["blocked_name"], **v),
+        _msg(conn, b, cid, "{name} steht vor dir", to_b + ([] if away_until else [" ", "Heute Abend tauschen?"]),
+             name=d["blocker_name"], **v),
     ]
 
 
@@ -273,6 +304,9 @@ def _due_reminders(conn, now):
     out = []
     for r in due:
         d = conflict_details(conn, r["id"])
+        if blocker_away(d):   # wer nicht da ist, kann nicht umparken – keine Erinnerung
+            conn.execute("UPDATE conflict SET reminded_at = ? WHERE id = ?", (iso(now), r["id"]))
+            continue
         out.append(_msg(conn, d["blocker_resident_id"], r["id"], "Gleich: {name} muss raus",
                         "{b_car} auf {b_spot} fährt {when} – dein Auto auf {a_spot} steht davor.",
                         name=d["blocked_name"], b_car=d["blocked_car"], b_spot=d["blocked_spot"],

@@ -15,7 +15,7 @@ EN = {
     "heute": "today",
     "morgen": "tomorrow",
     "übermorgen": "day after tomorrow",
-    "zu unbekannter Zeit": "at an unknown time",
+    "zu unbekannter Zeit": "an unknown time",
     # Patio-Notweg
     "rückwärts über {via} auf {to}": "reverse via {via} onto {to}",
     "rückwärts auf {to}": "reverse onto {to}",
@@ -98,6 +98,11 @@ EN = {
     "Unbekannter Endpunkt": "Unknown endpoint",
     "Interner Fehler": "Internal error",
     "Ungültiges JSON": "Invalid JSON",
+    "Du bist dann nicht da – bitte vorher umparken oder einen Tausch vereinbaren.": "You'll be away then – please move your car beforehand or arrange a swap.",
+    "{a_name} ist bis {away_until} nicht da und kann das Auto nicht wegfahren.": "{a_name} is away until {away_until} and can't move the car.",
+    "Rückkehr muss in der Zukunft liegen": "Return must be in the future",
+    "Beginn muss vor der Rückkehr liegen": "Start must be before the return",
+    "Höchstens 60 Tage im Voraus": "At most 60 days ahead",
     # Push-Test
     "Push-Nachrichten funktionieren.": "Push notifications are working.",
 }
@@ -108,7 +113,7 @@ ES = {
     "heute": "hoy",
     "morgen": "mañana",
     "übermorgen": "pasado mañana",
-    "zu unbekannter Zeit": "a una hora desconocida",
+    "zu unbekannter Zeit": "una hora sin determinar",
     # Patio-Notweg
     "rückwärts über {via} auf {to}": "marcha atrás por {via} hasta {to}",
     "rückwärts auf {to}": "marcha atrás hasta {to}",
@@ -191,6 +196,11 @@ ES = {
     "Unbekannter Endpunkt": "Dirección desconocida",
     "Interner Fehler": "Error interno",
     "Ungültiges JSON": "JSON no válido",
+    "Du bist dann nicht da – bitte vorher umparken oder einen Tausch vereinbaren.": "Entonces no estarás – por favor, mueve el coche antes o acuerda un intercambio.",
+    "{a_name} ist bis {away_until} nicht da und kann das Auto nicht wegfahren.": "{a_name} no está hasta {away_until} y no puede mover el coche.",
+    "Rückkehr muss in der Zukunft liegen": "La vuelta tiene que ser en el futuro",
+    "Beginn muss vor der Rückkehr liegen": "El inicio tiene que ser antes de la vuelta",
+    "Höchstens 60 Tage im Voraus": "Como máximo 60 días por adelantado",
     # Push-Test
     "Push-Nachrichten funktionieren.": "Las notificaciones push funcionan.",
 }

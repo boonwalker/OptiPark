@@ -47,6 +47,7 @@ tests/            Regel-Tests: .venv.nosync/bin/python -m unittest discover test
 
 ### Datenmodell
 
+- **resident.away_from / away_until**: „Nicht da“ – der Nachbar ist weg, sein Auto bleibt stehen. Ausfahrten in der Zeit fallen weg; Konflikte mit einem abwesenden Blockierer werden für die ganze Abwesenheit erkannt.
 - **lot → zone → spot**: Parkplatz, Bereiche („Tür 1 · links“), Stellplätze mit Rasterposition.
 - **spot_exit**: Wegenetz – von Platz X kann man direkt hinaus oder über Platz Y weiterfahren. Mehrere Zeilen = alternative Wege.
 - **resident → car**: Nachbarn und ihre Autos (mehrere pro Nachbar möglich).

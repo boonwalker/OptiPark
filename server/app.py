@@ -111,7 +111,7 @@ def get_state(ctx):
         exits = [list(r) for r in conn.execute("SELECT from_spot_id, to_spot_id FROM spot_exit ORDER BY id")]
         occ = conn.execute("""
             SELECT p.id AS parking_id, p.spot_id, p.parked_at, c.id AS car_id, c.nickname, c.color, c.patio_route,
-                   r.id AS resident_id, r.display_name AS resident_name
+                   r.id AS resident_id, r.display_name AS resident_name, r.away_from, r.away_until
             FROM parking p JOIN car c ON c.id = p.car_id JOIN resident r ON r.id = c.resident_id
             WHERE p.left_at IS NULL""").fetchall()
 
@@ -134,6 +134,8 @@ def get_state(ctx):
             if me:  # Namen nur für angemeldete Nachbarn
                 entry.update(nickname=o["nickname"], resident_id=o["resident_id"],
                              resident_name=o["resident_name"])
+                if o["away_until"] and o["away_until"] > iso(now):   # „nicht da“ (jetzt oder geplant)
+                    entry.update(away_from=o["away_from"], away_until=o["away_until"])
             by_spot[o["spot_id"]] = entry
         for s in spots:
             s["occupant"] = by_spot.get(s["id"])
@@ -167,7 +169,10 @@ def get_state(ctx):
             c["planned"] = [dict(r) for r in conn.execute(
                 "SELECT id, depart_at, note FROM planned_departure WHERE car_id = ? AND depart_at > ? ORDER BY depart_at",
                 (c["id"], iso(now)))]
+        away_active = me["away_until"] and me["away_until"] > iso(now)
         result["me"] = {"id": me["id"], "display_name": me["display_name"], "unit": me["unit"], "lang": me["lang"],
+                        "away_from": me["away_from"] if away_active else None,
+                        "away_until": me["away_until"] if away_active else None,
                         "cars": my_cars,
                         "push_subscriptions": conn.execute(
                             "SELECT COUNT(*) FROM push_subscription WHERE resident_id = ?", (me["id"],)).fetchone()[0]}
@@ -237,6 +242,20 @@ def update_me(ctx):
     if "lang" in b:   # nur die Sprache ändern (die App gleicht sie beim Start ab)
         require(b["lang"] in i18n.LANGS, 400, "Ungültige Sprache")
         ctx["conn"].execute("UPDATE resident SET lang = ? WHERE id = ?", (b["lang"], ctx["me"]["id"]))
+    if "away" in b:   # „Nicht da“: {"from": ISO|null, "until": ISO} oder null zum Löschen
+        a = b["away"]
+        if a is None:
+            ctx["conn"].execute("UPDATE resident SET away_from = NULL, away_until = NULL WHERE id = ?", (ctx["me"]["id"],))
+        else:
+            until = parse_iso(a.get("until")) if isinstance(a, dict) else None
+            start = parse_iso(a.get("from")) if isinstance(a, dict) and a.get("from") else None
+            require(until and until > ctx["now"], 400, "Rückkehr muss in der Zukunft liegen")
+            require(start is None or start < until, 400, "Beginn muss vor der Rückkehr liegen")
+            require(until - ctx["now"] <= timedelta(days=60), 400, "Höchstens 60 Tage im Voraus")
+            if start is not None and start <= ctx["now"]:
+                start = None
+            ctx["conn"].execute("UPDATE resident SET away_from = ?, away_until = ? WHERE id = ?",
+                                (iso(start) if start else None, iso(until), ctx["me"]["id"]))
     if "display_name" in b or "unit" in b:
         ctx["conn"].execute("UPDATE resident SET display_name = COALESCE(?, display_name), unit = ? WHERE id = ?",
                             (text(b, "display_name", 40), text(b, "unit", 30), ctx["me"]["id"]))
@@ -568,7 +587,8 @@ class Handler(BaseHTTPRequestHandler):
         if not h.startswith("Bearer "):
             return None
         with db.read() as conn:
-            r = conn.execute("SELECT id, display_name, unit, lang FROM resident WHERE auth_token = ?", (h[7:],)).fetchone()
+            r = conn.execute("SELECT id, display_name, unit, lang, away_from, away_until FROM resident WHERE auth_token = ?",
+                             (h[7:],)).fetchone()
         return dict(r) if r else None
 
     def _body(self):

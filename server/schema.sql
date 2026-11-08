@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS resident (
     unit          TEXT,                       -- Wohnung / Klingel, optional
     auth_token    TEXT    NOT NULL UNIQUE,    -- persönlicher Geräteschlüssel
     lang          TEXT    NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en', 'es')),  -- Sprache für Nachrichten
+    away_from     TEXT,                       -- „Nicht da“: ab (NULL = sofort) …
+    away_until    TEXT,                       -- … bis (NULL = keine Abwesenheit); das Auto bleibt stehen
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 

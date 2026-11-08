@@ -153,6 +153,8 @@ CREATE TABLE IF NOT EXISTS resident (
     unit          TEXT,                       -- Wohnung / Klingel, optional
     auth_token    TEXT    NOT NULL UNIQUE,    -- persönlicher Geräteschlüssel
     lang          TEXT    NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en', 'es')),  -- Sprache für Nachrichten
+    away_from     TEXT,                       -- „Nicht da“: ab (NULL = sofort) …
+    away_until    TEXT,                       -- … bis (NULL = keine Abwesenheit); das Auto bleibt stehen
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -292,7 +294,7 @@ INSERT OR IGNORE INTO meta(key, value) VALUES ('version', '0');
 `db.py`:
 - `connect()`: `isolation_level=None`, `row_factory=sqlite3.Row`, `PRAGMA foreign_keys=ON`, `journal_mode=WAL`.
 - `tx()`: Kontextmanager mit globalem `threading.Lock`, `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`. `read()`: einfache Leseverbindung.
-- `init()`: Ordner anlegen, Schema per `executescript`, dann `_migrate()` (ältere Datenbanken: Spalten `car.patio_route` und `resident.lang` per `ALTER TABLE` ergänzen; erlaubt die Sprach-Prüfung von `resident` noch kein `'es'`, wird die Tabelle mit `PRAGMA foreign_keys = OFF` neu angelegt und umbenannt, damit die Autos erhalten bleiben; fehlt `conflict.patio_choice`, die abgeleitete Tabelle `conflict` löschen und neu anlegen), beim ersten Mal Seed aus `layout.py` (lot, zones, spots), danach **immer** `rules.load_exits(conn)`.
+- `init()`: Ordner anlegen, Schema per `executescript`, dann `_migrate()` (ältere Datenbanken: Spalten `car.patio_route` und `resident.lang` per `ALTER TABLE` ergänzen; erlaubt die Sprach-Prüfung von `resident` noch kein `'es'`, wird die Tabelle mit `PRAGMA foreign_keys = OFF` neu angelegt und umbenannt, damit die Autos erhalten bleiben; fehlen `resident.away_from/away_until`, per `ALTER TABLE` ergänzen; fehlt `conflict.patio_choice`, die abgeleitete Tabelle `conflict` löschen und neu anlegen), beim ersten Mal Seed aus `layout.py` (lot, zones, spots), danach **immer** `rules.load_exits(conn)`.
 - `bump_version(conn)`: erhöht `meta.version` (Clients pollen das).
 - Hilfen: `utcnow()` (ohne Mikrosekunden), `iso(dt)`, `parse_iso(s)`.
 
@@ -614,7 +616,7 @@ Legt (falls noch nicht vorhanden) an und gibt Anmelde-Links `http://localhost:80
 
 ---
 
-## 12. Tests (müssen alle grün sein, aktuell 57)
+## 12. Tests (müssen alle grün sein, aktuell 65)
 
 `tests/test_rules.py` (Hilfsmethode `park(L5=7, L3=9, L4=None)` = Platz → Stunden bis zur Ausfahrt, `None` = unbekannt; Ergebnis als Menge `"Blocker→Blockierter"`):
 
@@ -697,7 +699,17 @@ Ergänzend im API-Test: Nach Schritt 6 parkt Anna neu so, dass Ben auf R2 hinter
 - Patio-Rückfrage an Ben (en) enthält „Fallback: reverse onto P1“ und „Does that work for you?“.
 - Rausfahr-Anfrage von Ben (de), Clara (en) im Weg → Titel „Ben wants to leave now“; sofortiges Nachklingeln → `RequestError`, übersetzt „Please wait … more min.“.
 
-Am Ende: `python -m unittest discover tests -v` → **alle grün** (57 aus den Tabellen oben + der API-Test).
+Am Ende: `python -m unittest discover tests -v` → **alle grün** (65 aus den Tabellen oben + der API-Test).
+
+### 12c. „Nicht da“
+
+- `departures.away_windows(conn, car_ids, now)` → `{car_id: (ab, bis)}` für Besitzer mit `away_until > now` (`ab` NULL = jetzt); `is_away(fenster, zeit)`. `next_departures` lässt Ausfahrten im Fenster weg (einmalige: erste außerhalb; übliche: Vorschau 8 Tage **plus** Länge der längsten Abwesenheit, max. 60).
+- `conflicts.find_blockings`: B mit Ausfahrt jenseits von 36 h wird nur geprüft, wenn sie vor dem Ende einer Abwesenheit liegt; gemeldet werden dann nur Blockierer, deren Besitzer zu Bs Ausfahrzeit nicht da ist. `conflict_details` liefert `blocker_away_from/until`, `blocker_away(d)` → Rückkehr (ISO) oder `None`.
+- Nachrichten bei abwesendem Blockierer: an A „… Du bist dann nicht da – bitte vorher umparken oder einen Tausch vereinbaren.“, an B „… {a_name} ist bis {away_until} nicht da und kann das Auto nicht wegfahren.“ (ohne „Heute Abend tauschen?“). Keine „Gleich:“-Erinnerung an Abwesende.
+- API: `PATCH /api/me {"away": {"from": ISO|null, "until": ISO}}` bzw. `{"away": null}`; Prüfungen „Rückkehr muss in der Zukunft liegen“, „Beginn muss vor der Rückkehr liegen“, „Höchstens 60 Tage im Voraus“. `/api/state`: `me.away_from/away_until`, je Belegung `away_from/away_until` (nur Angemeldete).
+- Oberfläche (beide Versionen): Profil-Abschnitt „Nicht da“ („Ich bin nicht da …“ / „Ich bin wieder da“), Fenster mit Schnellwahl „Heute Nacht“ (bis morgen 07:00), „Bis morgen Abend“ (20:00), „Eine Woche“ (in 7 Tagen 18:00), Feldern „Ab“/„Zurück am“ und Live-Vorschau `awayImpact` („⚠️ Bevor du gehst: Dein {car} auf {spot} steht vor {name} …“ bzw. „✓ Dein Auto steht in der Zeit niemandem im Weg.“). Status-Zeile „Nicht da bis …“ mit „Wieder da“. Konflikt-Karten mit abwesendem Blockierer: Hinweis direkt nach dem ersten Absatz, keine „zur Seite fahren“-Knöpfe, „Tausch“ nur bis die Abwesenheit beginnt. Artefakt: `residents/{id}.away = {from, until}`.
+
+`tests/test_away.py`: Ausfahrten in der Abwesenheit fallen weg (erste danach); übliche Fahrt nach 12 Tagen Abwesenheit wird gefunden; spätere Abwesenheit lässt die Fahrt davor stehen; Ben R2 in 96 h, Clara R1 5 Tage weg → Konflikt; ohne Abwesenheit → keiner; Abwesender, der nicht im Weg steht, löst nichts aus; Nachrichten nennen die Abwesenheit, keine „Gleich:“-Erinnerung; Rückkehr vor Bens Ausfahrt → normaler Konflikt.
 
 ### 12b. Konflikte anderer
 

@@ -21,7 +21,7 @@ server/          Python-Backend (fast nur Standardbibliothek, http.server + sqli
   app.py           HTTP-API, statische Dateien, Minuten-Ticker
   demo.py          Demo-Nachbarn
 web/             Frontend als PWA ohne Build-Schritt (index.html, styles.css, i18n.js, app.js, sw.js)
-tests/           unittest: test_rules.py, test_leave_requests.py, test_patio.py, test_i18n.py
+tests/           unittest: test_rules.py, test_leave_requests.py, test_patio.py, test_i18n.py, test_away.py
 artifact/        Version als claude.ai-Artefakt (siehe unten)
 docs/            Demo als GitHub-Pages-Seite (gebaut mit artifact/build.py --standalone)
 REPRODUKTION.md  vollständige Bauanleitung (Datenmodell und Layout wörtlich, alle Texte, alle Testfälle)
@@ -37,7 +37,7 @@ python3 -m venv .venv            # auf dem Mac im iCloud-Ordner: .venv.nosync
 .venv/bin/python -m unittest discover tests -v
 ```
 
-- Vor jeder Übergabe: **alle Tests grün** (aktuell 57). Neue Regeln bekommen neue Testfälle.
+- Vor jeder Übergabe: **alle Tests grün** (aktuell 65). Neue Regeln bekommen neue Testfälle.
 - Frontend-Syntax prüfen, falls `node` da ist: `node --check web/app.js web/i18n.js artifact/app.js`.
 - Datenordner: `PARK_DATA_DIR` (Standard `data.nosync/`). Ältere Datenbanken migriert `db._migrate()` beim Start.
 
@@ -50,6 +50,11 @@ python3 -m venv .venv            # auf dem Mac im iCloud-Ordner: .venv.nosync
   - R1 direkt (mittig vor beiden Spalten). R2, R3 über R1. R4 über R2 **oder** seitlich auf R5 und dann über R3; R5 über R3 **oder** seitlich auf R4 und dann über R2.
   - Patio: P1 über L6 oder P2; P2 über L7, P1 oder P3; P3 über R4, P2 oder P4; P4 über R5 oder P3. Die Trennwand endet vor dem Patio; Patio-Autos fahren **normal** seitlich, auch zur anderen Seite.
 - **Konflikt:** B hat innerhalb von 36 h eine bekannte Ausfahrt und keinen freien Weg, weil Autos im Weg stehen, die später oder zu unbekannter Zeit fahren. Gemeldet werden die Autos, an die B **als Erste** stößt. Wer gleichzeitig oder früher fährt, blockiert nicht. 45 Min. vorher Erinnerung an den Blockierer. Karten und Benachrichtigungen nur für die Beteiligten; offene Konflikte anderer sieht jeder als **blasse graue Linie** auf der Grafik, beim Antippen eines der Plätze mit Namen und Zeiten.
+- **„Nicht da“** (Profil oder Status-Zeile): Nachbar ist weg, **das Auto bleibt stehen** und kann bis zur Rückkehr nicht bewegt werden (max. 60 Tage, Beginn auch später möglich).
+  - Ausfahrten in der Zeit fallen weg; nächste Ausfahrt = erste nach der Rückkehr.
+  - Konflikte, bei denen der Blockierer zu Bs Ausfahrzeit nicht da ist, werden für die **ganze Abwesenheit** erkannt (nicht nur 36 h).
+  - **Warnung beim Eintragen**, wen das eigene Auto in der Zeit zuparkt.
+  - Betroffene lesen „{Name} ist bis … nicht da und kann das Auto nicht wegfahren“; „Ich fahre zur Seite“ entfällt, Tausch nur bis die Abwesenheit beginnt; **keine 45-Min.-Erinnerung** an Abwesende.
 - **Tausch** nur, wenn beide zustimmen; „Getauscht“ bucht die Autos über Kreuz um.
 - **„Ich will gleich rausfahren“:** nur wenn das Auto jetzt zugeparkt ist; benachrichtigt alle, die schichtweise weg müssten (auch zweite Reihe). Antworten „Komme sofort“ / „Dauert ~15 Min.“, Nachklingeln alle 3 Min., endet von selbst, wenn der Weg frei ist, verfällt nach 1 h.
 - **Patio-Notweg** (rückwärts aufs schmale Patio rangieren, dann darüber raus): nur **Notlösung**.

@@ -144,11 +144,15 @@ function fmtRoute(r) {
 
 /** Wie server/conflicts.py: occ = Map(spotId → {carId, dep: ms|null}) → [{blocker, blocked}] */
 function findBlockings(occ) {
+  // Jenseits des Horizonts nur, wenn ein Blockierer zu Bs Ausfahrzeit „nicht da“ ist (ganze Abwesenheit prüfen)
   const now = Date.now(), horizon = (S.horizon_hours ?? 36) * 3600e3, res = [];
+  const awayEnd = Math.max(now, ...[...occ.values()].map((a) => (a.away ? a.away.until : 0)));
   for (const [bSpot, b] of occ) {
-    if (b.dep === null || b.dep - now > horizon) continue;
+    if (b.dep === null) continue;
+    const far = b.dep - now > horizon;
+    if (far && b.dep >= awayEnd) continue;
     const still = new Set([...occ].filter(([s, a]) => s !== bSpot && (a.dep === null || a.dep > b.dep)).map(([s]) => s));
-    for (const a of explore(bSpot, still)) res.push({ blocker: a, blocked: bSpot });
+    for (const a of explore(bSpot, still)) if (!far || isAway(occ.get(a).away, b.dep)) res.push({ blocker: a, blocked: bSpot });
   }
   return res;
 }
@@ -398,7 +402,7 @@ function renderStatus() {
     $('#stCar').onclick = () => openCarEditor();
     return;
   }
-  el.innerHTML = cars.map((c) => {
+  el.innerHTML = awayStatusHtml() + cars.map((c) => {
     const spot = c.spot_id ? spotById(c.spot_id) : null;
     return `<div class="st-row"><div class="swatch" style="background:${esc(c.color)}"></div>
       <div class="grow">${spot
@@ -408,6 +412,7 @@ function renderStatus() {
       ${spot && blockedNow(spot.id) && !myRequest(c.id)
         ? `<button class="btn primary block" data-wantout="${c.id}">${t('🚗 Ich will gleich rausfahren')}</button>` : ''}`;
   }).join('');
+  bindAwayStatus(el);
   $$('[data-leave]').forEach((b) => (b.onclick = () => leave(Number(b.dataset.leave))));
   $$('[data-wantout]').forEach((b) => (b.onclick = () => wantOut(Number(b.dataset.wantout))));
 }
@@ -459,6 +464,114 @@ function askPatioNow(car) {
   };
 }
 
+// ── „Nicht da“: Nachbar weg, Auto bleibt stehen ──────────────────────
+/** {from, until} in ms, solange die Abwesenheit noch nicht vorbei ist. */
+const awayWindow = (from, until) => (until && Date.parse(until) > Date.now() ? { from: from ? Date.parse(from) : -Infinity, until: Date.parse(until) } : null);
+const isAway = (w, at) => !!w && w.from <= at && at < w.until;
+/** Ist der Blockierer zu Bs Ausfahrzeit nicht da? */
+const blockerAway = (c) => isAway(awayWindow(c.blocker_away_from, c.blocker_away_until), Date.parse(c.blocked_departs_at));
+const blockerAwayStarted = (c) => !c.blocker_away_from || Date.parse(c.blocker_away_from) <= Date.now();
+function awayText(from, until) {
+  return from && Date.parse(from) > Date.now()
+    ? t('Nicht da von {from} bis {until}', { from: fmtWhen(from), until: fmtWhen(until) })
+    : t('Nicht da bis {until}', { until: fmtWhen(until) });
+}
+
+/** Wen würden meine Autos zuparken, wenn ich von `fromMs` bis `untilMs` nicht da bin? */
+function awayImpact(fromMs, untilMs) {
+  const mine = myCarIds(), occ = new Map(), mineAway = { from: fromMs, until: untilMs };
+  for (const s of S.spots) {
+    const o = s.occupant;
+    if (!o) continue;
+    const isMine = mine.has(o.car_id);
+    let dep = o.next_departure ? Date.parse(o.next_departure.at) : null;
+    if (isMine && dep !== null && isAway(mineAway, dep)) dep = untilMs;   // frühestens nach der Rückkehr
+    occ.set(s.id, { carId: o.car_id, dep, o, away: isMine ? mineAway : awayWindow(o.away_from, o.away_until) });
+  }
+  return findBlockings(occ)
+    .filter((r) => mine.has(occ.get(r.blocker).carId) && !mine.has(occ.get(r.blocked).carId) && isAway(mineAway, occ.get(r.blocked).dep))
+    .map((r) => ({ mySpot: spotById(r.blocker), myCar: occ.get(r.blocker).o, spot: spotById(r.blocked), o: occ.get(r.blocked).o, at: occ.get(r.blocked).dep }));
+}
+
+function openAway() {
+  const body = openSheet(`
+    <h2>${t('Ich bin nicht da')}</h2>
+    <p class="sub">${t('Dein Auto bleibt in der Zeit stehen. Die App rechnet damit, dass du es nicht wegfahren kannst, und warnt betroffene Nachbarn rechtzeitig.')}</p>
+    <div class="chips" id="awQuick">
+      <button class="chip" data-q="night">${t('Heute Nacht')}</button>
+      <button class="chip" data-q="tomorrow">${t('Bis morgen Abend')}</button>
+      <button class="chip" data-q="week">${t('Eine Woche')}</button>
+    </div>
+    <label class="field">${t('Ab')}<input type="datetime-local" id="awFrom"></label>
+    <label class="field">${t('Zurück am')}<input type="datetime-local" id="awUntil"></label>
+    <div id="awImpact"></div>
+    <div class="actions"><button class="btn primary block" id="awGo">${t('Eintragen')}</button></div>`);
+  const from = $('#awFrom', body), until = $('#awUntil', body);
+  from.value = toLocalInput(new Date());
+  until.value = toLocalInput(tomorrowAt(7));
+  const ms = (input) => (input.value ? new Date(input.value).getTime() : NaN);
+  function update() {
+    const f = Math.max(ms(from), Date.now()), u = ms(until);
+    if (!(u > Date.now() && f < u)) { $('#awImpact', body).innerHTML = ''; return; }
+    const hits = awayImpact(f, u);
+    $('#awImpact', body).innerHTML = hits.length
+      ? `<div class="callout warn"><b>${t('⚠️ Bevor du gehst:')}</b> ${hits.map((x) => t('Dein {car} auf {spot} steht vor {name} ({their_spot}), {name} muss {when} raus.', {
+        car: esc(x.myCar.nickname), spot: esc(x.mySpot.code), name: `<b>${esc(x.o.resident_name)}</b>`, their_spot: esc(x.spot.code), when: esc(fmtWhen(new Date(x.at).toISOString())) })).join(' ')}</div>
+         <p class="hint">${t('Park am besten vorher um oder biete einen Tausch an. Eintragen kannst du trotzdem; die Betroffenen erfahren dann, dass du nicht da bist.')}</p>`
+      : `<div class="callout good">${t('✓ Dein Auto steht in der Zeit niemandem im Weg.')}</div>`;
+  }
+  $$('[data-q]', body).forEach((b) => (b.onclick = () => {
+    from.value = toLocalInput(new Date());
+    const d = b.dataset.q === 'night' ? tomorrowAt(7) : b.dataset.q === 'tomorrow' ? tomorrowAt(20) : (() => { const x = tomorrowAt(18); x.setDate(x.getDate() + 6); return x; })();
+    until.value = toLocalInput(d);
+    $$('[data-q]', body).forEach((c) => c.setAttribute('aria-pressed', c === b));
+    update();
+  }));
+  from.addEventListener('input', update);
+  until.addEventListener('input', update);
+  $('#awGo', body).onclick = async () => {
+    const f = ms(from), u = ms(until);
+    if (!(u > Date.now())) return toast(t('Rückkehr muss in der Zukunft liegen'), true);
+    if (!(f < u)) return toast(t('Beginn muss vor der Rückkehr liegen'), true);
+    await saveAway({ from: f > Date.now() ? new Date(f).toISOString() : null, until: new Date(u).toISOString() }, t('Eingetragen – gute Zeit! 👋'));
+    closeSheet();
+  };
+  update();
+}
+
+/** Abschnitt im Profil */
+function awayProfileHtml() {
+  return `<h3>${t('Nicht da')}</h3>
+    ${S.me.away_until
+      ? `<div class="callout info">${esc(awayText(S.me.away_from, S.me.away_until))}. ${t('Dein Auto bleibt stehen.')}</div><button class="btn block" id="pfBack">${t('Ich bin wieder da')}</button>`
+      : `<p class="hint">${t('Verreist oder über Nacht weg, und dein Auto bleibt hier? Trag es ein, damit die App deine Nachbarn rechtzeitig warnt.')}</p><button class="btn block" id="pfAway">${t('Ich bin nicht da …')}</button>`}`;
+}
+function bindAwayProfile(body) {
+  const back = $('#pfBack', body); if (back) back.onclick = async () => { await saveAway(null, t('Willkommen zurück!')); closeSheet(); };
+  const go = $('#pfAway', body); if (go) go.onclick = () => openAway();
+}
+/** Zeile oben im Status */
+function awayStatusHtml() {
+  return S.me?.away_until ? `<div class="st-row"><div class="grow"><b>${esc(awayText(S.me.away_from, S.me.away_until))}</b><small>${t('Dein Auto bleibt stehen.')}</small></div>
+    <button class="btn small" id="stBack">${t('Wieder da')}</button></div>` : '';
+}
+function bindAwayStatus(el) {
+  const b = $('#stBack', el); if (b) b.onclick = () => saveAway(null, t('Willkommen zurück!'));
+}
+/** Hinweis auf der Konflikt-Karte, wenn der Blockierer zur Ausfahrzeit nicht da ist */
+function awayConflictNote(c) {
+  if (!blockerAway(c)) return '';
+  return c.role === 'blocker'
+    ? `<div class="callout warn">${t('Du bist dann nicht da – bitte vorher umparken oder einen Tausch vereinbaren.')}</div>`
+    : `<div class="callout warn">${t('{a_name} ist bis {away_until} nicht da und kann das Auto nicht wegfahren.', { a_name: esc(c.blocker_name), away_until: esc(fmtWhen(c.blocker_away_until)) })}</div>`;
+}
+function conflictCard(c) {
+  const html = conflictCardInner(c), note = awayConflictNote(c);
+  return note ? html.replace('</p>', `</p>${note}`) : html;   // gleich nach dem ersten Absatz
+}
+
+const saveAway = (away, okMsg) => act(() => api('PATCH', '/api/me', { away }), okMsg);
+
 function minutesSince(iso) { return Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); }
 
 function requestCard(r) {
@@ -496,13 +609,15 @@ function requestCard(r) {
   }).join('');
 }
 
-function conflictCard(c) {
+function conflictCardInner(c) {
   const me = c.role, other = me === 'blocker' ? 'blocked' : 'blocker';
   const myChoice = c[`${me}_choice`], theirChoice = c[`${other}_choice`];
   const otherName = esc(c[`${other}_name`]);
   const bWhen = esc(fmtWhen(c.blocked_departs_at));
   const aWhen = c.blocker_departs_at ? esc(fmtWhen(c.blocker_departs_at)) : t('zu unbekannter Zeit');
-  const btn = (choice, label, cls = '') => `<button class="btn small ${cls}" data-id="${c.id}" data-choice="${choice}">${label}</button>`;
+  // Blockierer zur Ausfahrzeit nicht da: „zur Seite fahren“ geht nicht, Tausch nur bevor er weg ist
+  const away = blockerAway(c);
+  const btn = (choice, label, cls = '') => (away && (choice === 'manual' || (choice === 'swap' && blockerAwayStarted(c))) ? '' : `<button class="btn small ${cls}" data-id="${c.id}" data-choice="${choice}">${label}</button>`);
   const meta = `<div class="meta">${t('{a} steht vor {b}', { a: esc(c.blocker_spot), b: esc(c.blocked_spot) })}</div>`;
   const self = c.blocker_resident_id === c.blocked_resident_id;
 
@@ -649,7 +764,7 @@ function impact(spot, depIso, car) {
   for (const s of S.spots) {
     const o = s.occupant;
     if (!o || o.car_id === car.id) continue;
-    occ.set(s.id, { carId: o.car_id, dep: o.next_departure ? Date.parse(o.next_departure.at) : null, o });
+    occ.set(s.id, { carId: o.car_id, dep: o.next_departure ? Date.parse(o.next_departure.at) : null, o, away: awayWindow(o.away_from, o.away_until) });
   }
   occ.set(spot.id, { carId: car.id, dep: depIso ? Date.parse(depIso) : null });
   const mine = myCarIds();
@@ -794,6 +909,7 @@ function openOther(spot) {
     <h2>${esc(spot.code)} · ${esc(o.resident_name)}</h2>
     <p class="sub">${esc(o.nickname)} · ${t('geparkt {when}', { when: esc(fmtWhen(o.parked_at)) })}</p>
     <dl class="kv"><dt>${t('Nächste Ausfahrt')}</dt><dd><b>${esc(depText(o.next_departure))}</b></dd></dl>
+    ${o.away_until ? `<div class="callout info">${t('{name}: {away}', { name: esc(o.resident_name), away: esc(awayText(o.away_from, o.away_until)) })}</div>` : ''}
     ${relationsHtml(spot)}
     <div class="actions"><button class="btn block" id="otClose">${t('Schließen')}</button></div>`);
   $('#otClose').onclick = closeSheet;
@@ -816,6 +932,8 @@ function openProfile() {
 
     <h3>${t('Sprache')}${LANG === 'en' ? '' : ' · Language'}</h3>
     <div class="chips" id="pfLang">${LANGS.map((l) => `<button class="chip" data-lang="${l}" aria-pressed="${LANG === l}">${LANG_NAMES[l]}</button>`).join('')}</div>
+
+    ${awayProfileHtml()}
 
     <h3>${t('Deine Autos')}</h3>
     <div class="list">${myCars().map((c) => `
@@ -847,6 +965,7 @@ function openProfile() {
   }));
   $$('[data-car]', body).forEach((b) => (b.onclick = () => openCarEditor(myCars().find((c) => c.id === Number(b.dataset.car)))));
   $('#pfAddCar', body).onclick = () => openCarEditor();
+  bindAwayProfile(body);
   const pp = $('#pfPush', body); if (pp) pp.onclick = () => enablePush().then(() => openProfile());
   const pt = $('#pfTest', body); if (pt) pt.onclick = () => act(() => api('POST', '/api/push/test'), t('Test gesendet'));
   $('#pfLink', body).onclick = async () => {

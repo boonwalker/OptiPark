@@ -89,6 +89,9 @@ def _migrate(conn, schema):
     if "lang" not in cols("resident"):
         conn.execute("ALTER TABLE resident ADD COLUMN lang TEXT NOT NULL DEFAULT 'de' CHECK (lang IN ('de', 'en', 'es'))")
     _allow_all_langs(conn, schema)
+    if "away_until" not in cols("resident"):
+        conn.execute("ALTER TABLE resident ADD COLUMN away_from TEXT")
+        conn.execute("ALTER TABLE resident ADD COLUMN away_until TEXT")
     if "patio_choice" not in cols("conflict"):
         # Konflikte sind abgeleitete Daten: Tabelle neu anlegen (neuer Status 'patio').
         conn.execute("DROP TABLE conflict")
